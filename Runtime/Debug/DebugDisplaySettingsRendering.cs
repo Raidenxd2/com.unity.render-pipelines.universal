@@ -261,18 +261,6 @@ namespace UnityEngine.Rendering.Universal
                 setIndex = (value) => panel.data.fullScreenDebugMode = (DebugFullScreenMode)value
             };
 
-            internal static DebugUI.Widget CreateStpDebugViews(SettingsPanel panel) => new DebugUI.EnumField
-            {
-                nameAndTooltip = Strings.StpDebugViews,
-                isHiddenCallback = () => panel.data.fullScreenDebugMode != DebugFullScreenMode.STP,
-                enumNames = STP.debugViewDescriptions,
-                enumValues = STP.debugViewIndices,
-                getter = () => (int)panel.data.stpDebugViewIndex,
-                setter = (value) => panel.data.stpDebugViewIndex = value,
-                getIndex = () => (int)panel.data.stpDebugViewIndex,
-                setIndex = (value) => panel.data.stpDebugViewIndex = value
-            };
-
             internal static DebugUI.Widget CreateMapOverlaySize(SettingsPanel panel) => new DebugUI.Container()
             {
                 children =
@@ -558,7 +546,6 @@ namespace UnityEngine.Rendering.Universal
                     children =
                     {
                         WidgetFactory.CreateMapOverlays(this),
-                        WidgetFactory.CreateStpDebugViews(this),
                         WidgetFactory.CreateMapOverlaySize(this),
                         WidgetFactory.CreateHDR(this),
                         WidgetFactory.CreateMSAA(this),

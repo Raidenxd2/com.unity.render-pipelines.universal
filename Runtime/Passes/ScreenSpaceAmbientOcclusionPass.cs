@@ -7,11 +7,6 @@ namespace UnityEngine.Rendering.Universal
     // The Screen Space Ambient Occlusion (SSAO) Pass
     internal class ScreenSpaceAmbientOcclusionPass : ScriptableRenderPass
     {
-        // Properties
-        private bool isRendererDeferred => m_Renderer != null
-                                           && m_Renderer is UniversalRenderer
-                                           && ((UniversalRenderer)m_Renderer).renderingModeActual == RenderingMode.Deferred;
-
         // Private Variables
         private readonly bool m_SupportsR8RenderTextureFormat = SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.R8);
         private int m_BlueNoiseTextureIndex = 0;
@@ -155,7 +150,7 @@ namespace UnityEngine.Rendering.Universal
             m_CurrentSettings = featureSettings;
 
             // RenderPass Event + Source Settings (Depth / Depth&Normals
-            if (isRendererDeferred)
+            if (renderer is UniversalRenderer { usesDeferredLighting: true })
             {
                 renderPassEvent = m_CurrentSettings.AfterOpaque ? RenderPassEvent.AfterRenderingOpaques : RenderPassEvent.AfterRenderingGbuffer;
 
@@ -355,6 +350,13 @@ namespace UnityEngine.Rendering.Universal
 
                 // Declare input textures
                 builder.UseTexture(passData.AOTexture, AccessFlags.ReadWrite);
+
+                // TODO: Refactor to eliminate the need for 'UseTexture'.
+                // Currently required only because 'PostProcessUtils.SetSourceSize' allocates an RTHandle,
+                // which expects a valid graphicsResource. Without this call, 'cameraColor.graphicsResource'
+                // may be null if it wasn't initialized in an earlier pass (e.g., DrawOpaque).
+                if (resourceData.cameraColor.IsValid())
+                    builder.UseTexture(resourceData.cameraColor, AccessFlags.Read);
 
                 if (passData.BlurQuality != ScreenSpaceAmbientOcclusionSettings.BlurQualityOptions.Low)
                     builder.UseTexture(passData.blurTexture, AccessFlags.ReadWrite);

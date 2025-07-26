@@ -494,30 +494,6 @@ namespace UnityEngine.Rendering.Universal
         }
 
         /// <summary>
-        /// Returns true if the STP upscaler has been requested
-        /// Use IsSTPEnabled() to ensure that STP upscaler is active at runtime, it necessitates TAA pre-processing
-        /// </summary>
-        /// <returns>True if STP is requested</returns>
-        internal bool IsSTPRequested()
-        {
-            return (imageScalingMode == ImageScalingMode.Upscaling) && (upscalingFilter == ImageUpscalingFilter.STP);
-        }
-
-        /// <summary>
-        /// Returns true if the pipeline and the given camera are configured to render with the STP upscaler
-        ///
-        /// When STP runs, it relies on much of the existing TAA infrastructure provided by URP's native TAA. Due to this, URP forces the anti-aliasing mode to
-        /// TAA when STP is requested to ensure that most TAA logic remains active. A side effect of this behavior is that STP inherits all of the same configuration
-        /// restrictions as TAA and effectively cannot run if IsTemporalAAEnabled() returns false. The post processing pass logic that executes STP handles this
-        /// situation and STP should behave identically to TAA in cases where TAA support requirements aren't met at runtime.
-        /// </summary>
-        /// <returns>True if STP is enabled</returns>
-        internal bool IsSTPEnabled()
-        {
-            return IsSTPRequested() && IsTemporalAAEnabled();
-        }
-
-        /// <summary>
         /// The sorting criteria used when drawing opaque objects by the internal URP render passes.
         /// When a GPU supports hidden surface removal, URP will rely on that information to avoid sorting opaque objects front to back and
         /// benefit for more optimal static batching.
@@ -619,11 +595,6 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         internal TaaHistory taaHistory;
 
-        /// <summary>
-        /// The STP history data. It contains both persistent state and textures.
-        /// </summary>
-        internal StpHistory stpHistory;
-
         // TAA settings.
         internal TemporalAA.Settings taaSettings;
 
@@ -634,9 +605,15 @@ namespace UnityEngine.Rendering.Universal
         }
 
         /// <summary>
-        /// Camera at the top of the overlay camera stack
+        /// Camera at the top of the overlay camera stack. If no stack, it equals the camera field present above.
         /// </summary>
         public Camera baseCamera;
+
+        /// <summary>
+        /// Returns true if the baseCamera field is the last base camera being rendered to the frame.
+        /// While the last camera in a camera stack implies a last overlay camera, this indicates the last of all input base cameras.
+        /// </summary>
+        internal bool isLastBaseCamera;
 
         ///<inheritdoc/>
         public override void Reset()
@@ -692,9 +669,9 @@ namespace UnityEngine.Rendering.Universal
             worldSpaceCameraPos = default;
             backgroundColor = Color.black;
             taaHistory = null;
-            stpHistory = null;
             taaSettings = default;
             baseCamera = null;
+            isLastBaseCamera = false;
             stackAnyPostProcessingEnabled = false;
             stackLastCameraOutputToHDR = false;
         }

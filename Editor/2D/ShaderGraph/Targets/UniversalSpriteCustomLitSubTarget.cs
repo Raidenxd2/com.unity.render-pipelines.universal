@@ -109,9 +109,12 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     // Conditional State
                     renderStates = SpriteSubTargetUtility.GetDefaultRenderState(target),
                     pragmas = CorePragmas._2DDefault,
-                    defines = new DefineCollection() { CoreDefines.UseFragmentFog },
+                    defines = new DefineCollection(),
                     keywords = SpriteLitKeywords.Lit,
                     includes = SpriteLitIncludes.Lit,
+
+                    // Custom Interpolator Support
+                    customInterpolators = CoreCustomInterpDescriptors.Common
                 };
 
                 if (target.disableTint)
@@ -150,6 +153,9 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     pragmas = CorePragmas._2DDefault,
                     defines = new DefineCollection(),
                     includes = SpriteLitIncludes.Normal,
+
+                    // Custom Interpolator Support
+                    customInterpolators = CoreCustomInterpDescriptors.Common
                 };
 
                 if (target.disableTint)
@@ -187,7 +193,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     // Conditional State
                     renderStates = CoreRenderStates.Default,
                     pragmas = CorePragmas._2DDefault,
-                    defines = new DefineCollection() { CoreDefines.UseFragmentFog },
+                    defines = new DefineCollection(),
                     includes = SpriteLitIncludes.Forward,
 
                     // Custom Interpolator Support
@@ -285,6 +291,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
             public static IncludeCollection Lit = new IncludeCollection
             {
                 // Pre-graph
+                { CoreIncludes.FogPregraph },
                 { CoreIncludes.CorePregraph },
                 { CoreIncludes.ShaderGraphPregraph },
 
@@ -308,6 +315,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
             public static IncludeCollection Forward = new IncludeCollection
             {
                 // Pre-graph
+                { CoreIncludes.FogPregraph },
                 { CoreIncludes.CorePregraph },
                 { CoreIncludes.ShaderGraphPregraph },
 

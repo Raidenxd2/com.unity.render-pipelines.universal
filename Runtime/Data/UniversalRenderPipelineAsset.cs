@@ -361,13 +361,7 @@ namespace UnityEngine.Rendering.Universal
         /// Unity uses the AMD FSR 1.0 technique to perform upscaling.
         /// </summary>
         [InspectorName("FidelityFX Super Resolution 1.0"), Tooltip("If the target device does not support Unity shader model 4.5, Unity falls back to the Automatic option.")]
-        FSR,
-
-        /// <summary>
-        /// Unity uses the Spatial-Temporal Post-Processing technique to perform upscaling.
-        /// </summary>
-        [InspectorName("Spatial-Temporal Post-Processing"), Tooltip("If the target device does not support compute shaders or is running GLES, Unity falls back to the Automatic option.")]
-        STP
+        FSR
     }
 
     /// <summary>
@@ -379,7 +373,11 @@ namespace UnityEngine.Rendering.Universal
         BayerMatrix,
 
         /// <summary>Unity uses the precomputed blue noise texture to compute the LOD cross-fade dithering.</summary>
-        BlueNoise
+        BlueNoise,
+
+        /// <summary>Unity uses stencil test to make 2x2 pixel dithering pattern by using 2 stencil bits (4 and 8). This option significantly decreases the number of the shader variants, while GPU performance cost becomes slightly higher.</summary>
+        [InspectorName("2x2 Stencil"), Tooltip("2x2 pixel dithering pattern by stencil test with 2 stencil bits (4 and 8). This option decreases the number of the shader variants.")]
+        Stencil
     }
 
     /// <summary>
@@ -426,7 +424,7 @@ namespace UnityEngine.Rendering.Universal
 #if UNITY_EDITOR
     [ShaderKeywordFilter.ApplyRulesIfTagsEqual("RenderPipeline", "UniversalPipeline")]
 #endif
-    public partial class UniversalRenderPipelineAsset : RenderPipelineAsset<UniversalRenderPipeline>, ISerializationCallbackReceiver, IProbeVolumeEnabledRenderPipeline, IGPUResidentRenderPipeline, IRenderGraphEnabledRenderPipeline, ISTPEnabledRenderPipeline
+    public partial class UniversalRenderPipelineAsset : RenderPipelineAsset<UniversalRenderPipeline>, ISerializationCallbackReceiver, IProbeVolumeEnabledRenderPipeline, IGPUResidentRenderPipeline, IRenderGraphEnabledRenderPipeline
     {
         ScriptableRenderer[] m_Renderers = new ScriptableRenderer[1];
 
@@ -466,6 +464,7 @@ namespace UnityEngine.Rendering.Universal
         [ShaderKeywordFilter.RemoveIf(false, keywordNames: ShaderKeywordStrings.LOD_FADE_CROSSFADE)]
 #endif
         [SerializeField] bool m_EnableLODCrossFade = true;
+
         [SerializeField] LODCrossFadeDitheringType m_LODCrossFadeDitheringType = LODCrossFadeDitheringType.BlueNoise;
 
         // ShEvalMode.Auto is handled in shader preprocessor.
@@ -518,6 +517,10 @@ namespace UnityEngine.Rendering.Universal
         [ShaderKeywordFilter.SelectOrRemove(true, keywordNames: ShaderKeywordStrings.ReflectionProbeBoxProjection)]
 #endif
         [SerializeField] bool m_ReflectionProbeBoxProjection = false;
+#if UNITY_EDITOR // multi_compile_fragment _ _REFLECTION_PROBE_ATLAS
+        [ShaderKeywordFilter.RemoveIf(false, keywordNames: ShaderKeywordStrings.ReflectionProbeAtlas)]
+#endif
+        [SerializeField] bool m_ReflectionProbeAtlas = true;
 
         // Shadows Settings
         [SerializeField] float m_ShadowDistance = 50.0f;
@@ -1217,7 +1220,7 @@ namespace UnityEngine.Rendering.Universal
         public LightRenderingMode mainLightRenderingMode
         {
             get => m_MainLightRenderingMode;
-            set => m_MainLightRenderingMode = value;
+            internal set => m_MainLightRenderingMode = value;
         }
 
         /// <summary>
@@ -1226,7 +1229,7 @@ namespace UnityEngine.Rendering.Universal
         public bool supportsMainLightShadows
         {
             get => m_MainLightShadowsSupported;
-            set
+            internal set
             {
                 m_MainLightShadowsSupported = value;
 #if UNITY_EDITOR
@@ -1251,7 +1254,7 @@ namespace UnityEngine.Rendering.Universal
         public LightRenderingMode additionalLightsRenderingMode
         {
             get => m_AdditionalLightsRenderingMode;
-            set => m_AdditionalLightsRenderingMode = value;
+            internal set => m_AdditionalLightsRenderingMode = value;
         }
 
         /// <summary>
@@ -1269,7 +1272,7 @@ namespace UnityEngine.Rendering.Universal
         public bool supportsAdditionalLightShadows
         {
             get => m_AdditionalLightShadowsSupported;
-            set
+            internal set
             {
                 m_AdditionalLightShadowsSupported = value;
 #if UNITY_EDITOR
@@ -1343,7 +1346,16 @@ namespace UnityEngine.Rendering.Universal
         public bool reflectionProbeBoxProjection
         {
             get => m_ReflectionProbeBoxProjection;
-            set => m_ReflectionProbeBoxProjection = value;
+            internal set => m_ReflectionProbeBoxProjection = value;
+        }
+
+        /// <summary>
+        /// Specifies if this <c>UniversalRenderPipelineAsset</c> should use the reflection probe atlas for Forward Plus.
+        /// </summary>
+        public bool reflectionProbeAtlas
+        {
+            get => m_ReflectionProbeAtlas;
+            internal set => m_ReflectionProbeAtlas = value;
         }
 
         /// <summary>
@@ -1460,11 +1472,7 @@ namespace UnityEngine.Rendering.Universal
         /// Returns true if the Render Pipeline Asset supports mixed lighting, false otherwise.
         /// </summary>
         /// <see href="https://docs.unity3d.com/Manual/LightMode-Mixed.html"/>
-        public bool supportsMixedLighting
-        {
-            get => m_MixedLightingSupported;
-            set => m_MixedLightingSupported = value;
-        }
+        public bool supportsMixedLighting => m_MixedLightingSupported;
 
         /// <summary>
         /// Returns true if the Render Pipeline Asset supports light cookies, false otherwise.
@@ -1521,6 +1529,9 @@ namespace UnityEngine.Rendering.Universal
         {
             get
             {
+                if (RenderGraphGraphicsAutomatedTests.enabled)
+                   return true;
+
                 if (GraphicsSettings.TryGetRenderPipelineSettings<RenderGraphSettings>(out var renderGraphSettings))
                     return !renderGraphSettings.enableRenderCompatibilityMode;
 
@@ -1653,7 +1664,7 @@ namespace UnityEngine.Rendering.Universal
         static class Strings
         {
             public static readonly string notURPRenderer = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not being {nameof(UniversalRendererData)}.";
-            public static readonly string forwardPlusMissing = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not supporting Forward+.";
+            public static readonly string renderingModeIncompatible = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not using the Forward+ or Deferred+ rendering paths.";
         }
 
         /// <inheritdoc/>
@@ -1662,7 +1673,8 @@ namespace UnityEngine.Rendering.Universal
             message = string.Empty;
             severty = LogType.Warning;
 
-            // if any of the renderers are not set to Forward+ return false
+            // Only the URP rendering paths using the cluster light loop (F+ lights & probes) can be used with GRD,
+            // since BiRP-style per-object lights and reflection probes are incompatible with DOTS instancing.
             foreach (var rendererData in m_RendererDataList)
             {
                 if (rendererData is not UniversalRendererData universalRendererData)
@@ -1671,11 +1683,11 @@ namespace UnityEngine.Rendering.Universal
                     return false;
                 }
 
-                if (universalRendererData.renderingMode == RenderingMode.ForwardPlus)
-                    continue;
-
-                message = Strings.forwardPlusMissing;
-                return false;
+                if (!universalRendererData.usesClusterLightLoop)
+                {
+                    message = Strings.renderingModeIncompatible;
+                    return false;
+                }
             }
 
             return true;
@@ -1944,13 +1956,5 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         [Obsolete("This property is no longer necessary.")]
         public ProbeVolumeSceneData probeVolumeSceneData => null;
-
-        /// <summary>
-        /// Returns true if the asset is configured to use STP as an upscaling filter
-        /// </summary>
-        public bool isStpUsed
-        {
-            get { return m_UpscalingFilter == UpscalingFilterSelection.STP; }
-        }
     }
 }

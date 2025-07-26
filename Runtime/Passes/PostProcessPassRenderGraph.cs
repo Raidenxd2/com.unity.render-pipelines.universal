@@ -933,7 +933,7 @@ namespace UnityEngine.Rendering.Universal
 
         #region STP
 
-        private const string _UpscaledColorTargetName = "_UpscaledColorTarget";
+        private const string _UpscaledColorTargetName = "_CameraColorUpscaledSTP";
 
         private void RenderSTP(RenderGraph renderGraph, UniversalResourceData resourceData, UniversalCameraData cameraData, ref TextureHandle source, out TextureHandle destination)
         {
@@ -957,8 +957,6 @@ namespace UnityEngine.Rendering.Universal
 
             int frameIndex = Time.frameCount;
             var noiseTexture = m_Data.textures.blueNoise16LTex[frameIndex & (m_Data.textures.blueNoise16LTex.Length - 1)];
-
-            StpUtils.Execute(renderGraph, resourceData, cameraData, source, cameraDepth, motionVectors, destination, noiseTexture);
 
             // Update the camera resolution to reflect the upscaled size
             UpdateCameraResolution(renderGraph, cameraData, new Vector2Int(desc.width, desc.height));
@@ -1275,12 +1273,12 @@ namespace UnityEngine.Rendering.Universal
             internal int downsample;
         }
 
-        public TextureHandle RenderLensFlareScreenSpace(RenderGraph renderGraph, Camera camera, in TextureHandle destination, TextureHandle originalBloomTexture, TextureHandle screenSpaceLensFlareBloomMipTexture, bool enableXR)
+        public TextureHandle RenderLensFlareScreenSpace(RenderGraph renderGraph, Camera camera, in TextureHandle destination, TextureHandle originalBloomTexture, TextureHandle screenSpaceLensFlareBloomMipTexture, bool enableXR, bool sameInputOutputTex)
         {
             var downsample = (int) m_LensFlareScreenSpace.resolution.value;
 
-            int width = m_Descriptor.width / downsample;
-            int height = m_Descriptor.height / downsample;
+            int width = Math.Max(m_Descriptor.width / downsample, 1);
+            int height = Math.Max(m_Descriptor.height / downsample, 1);
 
             var streakTextureDesc = GetCompatibleDescriptor(m_Descriptor, width, height, m_DefaultColorFormat);
             var streakTmpTexture = UniversalRenderer.CreateRenderGraphTexture(renderGraph, streakTextureDesc, "_StreakTmpTexture", true, FilterMode.Bilinear);
@@ -1300,7 +1298,8 @@ namespace UnityEngine.Rendering.Universal
                 passData.screenSpaceLensFlareBloomMipTexture = screenSpaceLensFlareBloomMipTexture;
                 builder.UseTexture(screenSpaceLensFlareBloomMipTexture, AccessFlags.ReadWrite);
                 passData.originalBloomTexture = originalBloomTexture;
-                builder.UseTexture(originalBloomTexture, AccessFlags.ReadWrite);
+                if(!sameInputOutputTex)
+                    builder.UseTexture(originalBloomTexture, AccessFlags.ReadWrite);
                 passData.sourceDescriptor = m_Descriptor;
                 passData.camera = camera;
                 passData.material = m_Materials.lensFlareScreenSpace;
@@ -1373,19 +1372,22 @@ namespace UnityEngine.Rendering.Universal
             {
                 if (hasFinalPass || !cameraData.resolveFinalTarget)
                 {
-                    // Intermediate target can be scaled with render scale.
-                    // camera.pixelRect is the viewport of the final target in pixels.
-                    // Calculate scaled viewport for the intermediate target,
-                    // for example when inside a camera stack (non-final pass).
-                    var camViewportNormalized = cameraData.camera.rect;
+                    // Inside the camera stack the target is the shared intermediate target, which can be scaled with render scale.
+                    // camera.pixelRect is the viewport of the final target in pixels, so it cannot be used for the intermediate target.
+                    // On intermediate target allocation the viewport size is baked into the target size.
+                    // Which means the intermediate target does not have a viewport rect. Its offset is always 0 and its size matches viewport size.
+                    // The overlay cameras inherit the base viewport, so they cannot have a different viewport,
+                    // a necessary limitation since the target covers only the base viewport area.
+                    // The offsetting is finally done by the final output viewport-rect to the final target.
+                    // Note: effectively this is setting a fullscreen viewport for the intermediate target.
                     var targetWidth = cameraData.cameraTargetDescriptor.width;
                     var targetHeight = cameraData.cameraTargetDescriptor.height;
-                    var scaledTargetViewportInPixels = new Rect(
-                        camViewportNormalized.x * targetWidth,
-                        camViewportNormalized.y * targetHeight,
-                        camViewportNormalized.width * targetWidth,
-                        camViewportNormalized.height * targetHeight);
-                    cmd.SetViewport(scaledTargetViewportInPixels);
+                    var targetViewportInPixels = new Rect(
+                        0,
+                        0,
+                        targetWidth,
+                        targetHeight);
+                    cmd.SetViewport(targetViewportInPixels);
                 }
                 else
                     cmd.SetViewport(cameraData.pixelRect);
@@ -1410,6 +1412,7 @@ namespace UnityEngine.Rendering.Universal
             using (var builder = renderGraph.AddRasterRenderPass<PostProcessingFinalSetupPassData>("Postprocessing Final Setup Pass", out var passData, ProfilingSampler.Get(URPProfileId.RG_FinalSetup)))
             {
                 Material material = m_Materials.scalingSetup;
+                material.shaderKeywords = null;
 
                 if (settings.isFxaaEnabled)
                     material.EnableKeyword(ShaderKeywordStrings.Fxaa);
@@ -1705,7 +1708,7 @@ namespace UnityEngine.Rendering.Universal
             // This avoids the cost of EASU and is available for other upscaling options.
             // If FSR is enabled then FSR settings override the TAA settings and we perform RCAS only once.
             // If STP is enabled, then TAA sharpening has already been performed inside STP.
-            settings.isTaaSharpeningEnabled = (cameraData.IsTemporalAAEnabled() && cameraData.taaSettings.contrastAdaptiveSharpening > 0.0f) && !settings.isFsrEnabled && !cameraData.IsSTPEnabled();
+            settings.isTaaSharpeningEnabled = false;
 
             var tempRtDesc = cameraData.cameraTargetDescriptor;
             tempRtDesc.msaaSamples = 1;
@@ -1997,14 +2000,9 @@ namespace UnityEngine.Rendering.Universal
             // to tweaking the value here.
             bool useTemporalAA = cameraData.IsTemporalAAEnabled();
 
-            // STP is only enabled when TAA is enabled and all of its runtime requirements are met.
-            // Using IsSTPRequested() vs IsSTPEnabled() for perf reason here, as we already know TAA status
-            bool isSTPRequested = cameraData.IsSTPRequested();
-            bool useSTP = useTemporalAA && isSTPRequested;
-
             // Warn users if TAA and STP are disabled despite being requested
             if (!useTemporalAA && cameraData.IsTemporalAARequested())
-                TemporalAA.ValidateAndWarn(cameraData, isSTPRequested);
+                TemporalAA.ValidateAndWarn(cameraData);
 
             using (var builder = renderGraph.AddRasterRenderPass<PostFXSetupPassData>("Setup PostFX passes", out var passData,
                 ProfilingSampler.Get(URPProfileId.RG_SetupPostFX)))
@@ -2047,16 +2045,8 @@ namespace UnityEngine.Rendering.Universal
             // Temporal Anti Aliasing
             if (useTemporalAA)
             {
-                if (useSTP)
-                {
-                    RenderSTP(renderGraph, resourceData, cameraData, ref currentSource, out var StpTarget);
-                    currentSource = StpTarget;
-                }
-                else
-                {
-                    RenderTemporalAA(renderGraph, resourceData, cameraData, ref currentSource, out var TemporalAATarget);
-                    currentSource = TemporalAATarget;
-                }
+                RenderTemporalAA(renderGraph, resourceData, cameraData, ref currentSource, out var TemporalAATarget);
+                currentSource = TemporalAATarget;
             }
 
             if(useMotionBlur)
@@ -2086,7 +2076,8 @@ namespace UnityEngine.Rendering.Universal
                     if (useLensFlareScreenSpace)
                     {
                         int maxBloomMip = Mathf.Clamp(m_LensFlareScreenSpace.bloomMip.value, 0, m_Bloom.maxIterations.value/2);
-                        BloomTexture = RenderLensFlareScreenSpace(renderGraph, cameraData.camera, in currentSource, _BloomMipUp[0], _BloomMipUp[maxBloomMip], cameraData.xr.enabled);
+                        bool sameInputOutputTex = maxBloomMip == 0;
+                        BloomTexture = RenderLensFlareScreenSpace(renderGraph, cameraData.camera, in currentSource, _BloomMipUp[0], _BloomMipUp[maxBloomMip], cameraData.xr.enabled, sameInputOutputTex);
                     }
 
                     UberPostSetupBloomPass(renderGraph, in BloomTexture, m_Materials.uber);

@@ -5,7 +5,6 @@ using UnityEditor.Rendering.Universal.Path2D;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
-
 namespace UnityEditor.Rendering.Universal
 {
     [CustomEditor(typeof(Light2D))]
@@ -47,12 +46,6 @@ namespace UnityEditor.Rendering.Universal
                 // This is untracked right now...
                 serializedObject.ApplyModifiedProperties();
             }
-        }
-
-        private struct ToggleFoldoutResult
-        {
-            public bool foldoutState;
-            public bool toggleState;
         }
 
         private static class Styles
@@ -175,7 +168,6 @@ namespace UnityEditor.Rendering.Universal
 
         Light2D lightObject => target as Light2D;
 
-        Analytics.Renderer2DAnalytics m_Analytics;
         HashSet<Light2D> m_ModifiedLights;
 
         private void AnalyticsTrackChanges(SerializedObject serializedObject)
@@ -191,10 +183,8 @@ namespace UnityEditor.Rendering.Universal
             }
         }
 
-        private ToggleFoldoutResult DrawHeaderFoldoutWithToggle(GUIContent title, bool foldoutState, bool toggleState, string documentationURL = "")
+        private void DrawHeaderFoldoutWithToggle(GUIContent title, SavedBool foldoutState, SerializedProperty toggleState, string documentationURL = "")
         {
-            ToggleFoldoutResult foldoutResult = new ToggleFoldoutResult();
-
             const float height = 17f;
             var backgroundRect = GUILayoutUtility.GetRect(0, 0);
             float xMin = backgroundRect.xMin;
@@ -204,18 +194,22 @@ namespace UnityEditor.Rendering.Universal
             labelRect.xMin += 16f;
             labelRect.xMax -= 20f;
 
-            foldoutResult.toggleState = GUI.Toggle(labelRect, toggleState, " ");  // Needs a space because the checkbox won't have a proper outline if we don't make a space here
-            foldoutResult.foldoutState = CoreEditorUtils.DrawHeaderFoldout("", foldoutState);
+            bool newToggleState = GUI.Toggle(labelRect, toggleState.boolValue, " ");  // Needs a space because the checkbox won't have a proper outline if we don't make a space here
+            bool newFoldoutState = CoreEditorUtils.DrawHeaderFoldout("", foldoutState.value);
+
+            if (newToggleState != toggleState.boolValue)
+                toggleState.boolValue = newToggleState;
+
+            if (newFoldoutState != foldoutState.value)
+                foldoutState.value = newFoldoutState;
+
+
             labelRect.xMin += 20;
             EditorGUI.LabelField(labelRect, title, EditorStyles.boldLabel);
-
-
-            return foldoutResult;
         }
 
         void OnEnable()
         {
-            m_Analytics = Analytics.Renderer2DAnalytics.instance;
             m_ModifiedLights = new HashSet<Light2D>();
             m_SortingLayerDropDown = new SortingLayerDropDown();
 
@@ -297,27 +291,13 @@ namespace UnityEditor.Rendering.Universal
             m_SortingLayerDropDown.OnEnable(serializedObject, "m_ApplyToSortingLayers");
         }
 
-        internal void SendModifiedAnalytics(Analytics.Renderer2DAnalytics analytics, Light2D light)
-        {
-            Analytics.LightDataAnalytic lightData = new Analytics.LightDataAnalytic(light.GetInstanceID(), false, light.lightType);
-            Analytics.Renderer2DAnalytics.instance.SendData(lightData);
-        }
-
-        void OnDestroy()
-        {
-            if (m_ModifiedLights != null && m_ModifiedLights.Count > 0)
-            {
-                foreach (Light2D light in m_ModifiedLights)
-                {
-                    SendModifiedAnalytics(m_Analytics, light);
-                }
-            }
-        }
-
         void DrawBlendingGroup()
         {
             CoreEditorUtils.DrawSplitter(false);
-            m_BlendingSettingsFoldout.value = CoreEditorUtils.DrawHeaderFoldout(Styles.blendingSettingsFoldout, m_BlendingSettingsFoldout.value);
+            bool foldoutState = CoreEditorUtils.DrawHeaderFoldout(Styles.blendingSettingsFoldout, m_BlendingSettingsFoldout.value);
+            if (foldoutState != m_BlendingSettingsFoldout.value)
+                m_BlendingSettingsFoldout.value = foldoutState;
+
             if (m_BlendingSettingsFoldout.value)
             {
                 if (!m_AnyBlendStyleEnabled)
@@ -334,9 +314,7 @@ namespace UnityEditor.Rendering.Universal
         {
             CoreEditorUtils.DrawSplitter(false);
 
-            ToggleFoldoutResult result = DrawHeaderFoldoutWithToggle(Styles.shadowsSettingsFoldout, m_ShadowsSettingsFoldout.value, m_ShadowsEnabled.boolValue);
-            m_ShadowsEnabled.boolValue = result.toggleState;
-            m_ShadowsSettingsFoldout.value = result.foldoutState;
+            DrawHeaderFoldoutWithToggle(Styles.shadowsSettingsFoldout, m_ShadowsSettingsFoldout, m_ShadowsEnabled);
 
             if (m_ShadowsSettingsFoldout.value)
             {
@@ -354,9 +332,8 @@ namespace UnityEditor.Rendering.Universal
         {
             CoreEditorUtils.DrawSplitter(false);
 
-            ToggleFoldoutResult result = DrawHeaderFoldoutWithToggle(Styles.volumetricSettingsFoldout, m_VolumetricSettingsFoldout.value, m_VolumetricEnabled.boolValue);
-            m_VolumetricSettingsFoldout.value = result.foldoutState;
-            m_VolumetricEnabled.boolValue = result.toggleState;
+            DrawHeaderFoldoutWithToggle(Styles.volumetricSettingsFoldout, m_VolumetricSettingsFoldout, m_VolumetricEnabled);
+
             if (m_VolumetricSettingsFoldout.value)
             {
                 EditorGUI.indentLevel++;
@@ -375,7 +352,10 @@ namespace UnityEditor.Rendering.Universal
         void DrawNormalMapGroup()
         {
             CoreEditorUtils.DrawSplitter(false);
-            m_NormalMapsSettingsFoldout.value = CoreEditorUtils.DrawHeaderFoldout(Styles.normalMapsSettingsFoldout, m_NormalMapsSettingsFoldout.value);
+            bool foldoutState = CoreEditorUtils.DrawHeaderFoldout(Styles.normalMapsSettingsFoldout, m_NormalMapsSettingsFoldout.value);
+            if (foldoutState != m_NormalMapsSettingsFoldout.value)
+                m_NormalMapsSettingsFoldout.value = foldoutState;
+
             if (m_NormalMapsSettingsFoldout.value)
             {
                 EditorGUILayout.PropertyField(m_NormalMapQuality, Styles.generalNormalMapLightQuality);

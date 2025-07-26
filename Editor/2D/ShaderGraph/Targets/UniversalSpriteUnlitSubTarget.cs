@@ -127,7 +127,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     // Conditional State
                     renderStates = SpriteSubTargetUtility.GetDefaultRenderState(target),
                     pragmas = CorePragmas._2DDefault,
-                    defines = new DefineCollection() { CoreDefines.UseFragmentFog },
+                    defines = new DefineCollection(),
                     keywords = SpriteUnlitKeywords.Unlit,
                     includes = SpriteUnlitIncludes.Unlit,
 
@@ -169,7 +169,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     // Conditional State
                     renderStates = CoreRenderStates.Default,
                     pragmas = CorePragmas._2DDefault,
-                    defines = new DefineCollection() { CoreDefines.UseFragmentFog },
+                    defines = new(),
                     keywords = SpriteUnlitKeywords.Unlit,
                     includes = SpriteUnlitIncludes.Unlit,
 
@@ -230,6 +230,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
             public static IncludeCollection Unlit = new IncludeCollection
             {
                 // Pre-graph
+                { CoreIncludes.FogPregraph },
                 { CoreIncludes.CorePregraph },
                 { CoreIncludes.ShaderGraphPregraph },
 

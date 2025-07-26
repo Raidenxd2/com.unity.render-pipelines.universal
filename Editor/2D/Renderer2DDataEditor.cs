@@ -71,18 +71,8 @@ namespace UnityEditor.Rendering.Universal
         SavedBool m_CameraSortingLayerTextureFoldout;
         SavedBool m_PostProcessingFoldout;
 
-        Analytics.Renderer2DAnalytics m_Analytics = Analytics.Renderer2DAnalytics.instance;
         Renderer2DData m_Renderer2DData;
         bool m_WasModified;
-
-        void SendModifiedAnalytics(Analytics.IAnalytics analytics)
-        {
-            if (m_WasModified)
-            {
-                Analytics.RenderAssetAnalytic modifiedData = new Analytics.RenderAssetAnalytic(m_Renderer2DData.GetInstanceID(), false, 0, 0);
-                analytics.SendData(modifiedData);
-            }
-        }
 
         void OnEnable()
         {
@@ -133,11 +123,6 @@ namespace UnityEditor.Rendering.Universal
             m_LightBlendStylesFoldout = new SavedBool($"{target.GetType()}.LightBlendStylesFoldout", true);
             m_CameraSortingLayerTextureFoldout = new SavedBool($"{target.GetType()}.CameraSortingLayerTextureFoldout", true);
             m_PostProcessingFoldout = new SavedBool($"{target.GetType()}.PostProcessingFoldout", true);
-        }
-
-        private void OnDestroy()
-        {
-            SendModifiedAnalytics(m_Analytics);
         }
 
         public override void OnInspectorGUI()

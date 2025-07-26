@@ -11,6 +11,7 @@ using UnityEngine.Assertions;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
+
 namespace UnityEditor.Rendering.Universal
 {
     // Status for each row item to say in which state they are in.
@@ -537,7 +538,7 @@ namespace UnityEditor.Rendering.Universal
                     Status status = (Status) property.FindPropertyRelative("status").enumValueIndex;
                     string info = property.FindPropertyRelative("message").stringValue;
 
-                    element.Q<Toggle>("converterItemActive").RegisterCallback<ClickEvent>((evt) =>
+                    element.Q<Toggle>("converterItemActive").TrackPropertyValue(property, _ =>
                     {
                         UpdateSelectedConverterItems(id, child);
                         DeselectAllNoneLabels(item);
