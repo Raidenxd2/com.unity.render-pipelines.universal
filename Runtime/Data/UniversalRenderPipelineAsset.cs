@@ -1220,7 +1220,7 @@ namespace UnityEngine.Rendering.Universal
         public LightRenderingMode mainLightRenderingMode
         {
             get => m_MainLightRenderingMode;
-            internal set => m_MainLightRenderingMode = value;
+            set => m_MainLightRenderingMode = value;
         }
 
         /// <summary>
@@ -1229,7 +1229,7 @@ namespace UnityEngine.Rendering.Universal
         public bool supportsMainLightShadows
         {
             get => m_MainLightShadowsSupported;
-            internal set
+            set
             {
                 m_MainLightShadowsSupported = value;
 #if UNITY_EDITOR
@@ -1254,7 +1254,7 @@ namespace UnityEngine.Rendering.Universal
         public LightRenderingMode additionalLightsRenderingMode
         {
             get => m_AdditionalLightsRenderingMode;
-            internal set => m_AdditionalLightsRenderingMode = value;
+            set => m_AdditionalLightsRenderingMode = value;
         }
 
         /// <summary>
@@ -1272,7 +1272,7 @@ namespace UnityEngine.Rendering.Universal
         public bool supportsAdditionalLightShadows
         {
             get => m_AdditionalLightShadowsSupported;
-            internal set
+            set
             {
                 m_AdditionalLightShadowsSupported = value;
 #if UNITY_EDITOR
@@ -1346,7 +1346,7 @@ namespace UnityEngine.Rendering.Universal
         public bool reflectionProbeBoxProjection
         {
             get => m_ReflectionProbeBoxProjection;
-            internal set => m_ReflectionProbeBoxProjection = value;
+            set => m_ReflectionProbeBoxProjection = value;
         }
 
         /// <summary>
@@ -1472,7 +1472,11 @@ namespace UnityEngine.Rendering.Universal
         /// Returns true if the Render Pipeline Asset supports mixed lighting, false otherwise.
         /// </summary>
         /// <see href="https://docs.unity3d.com/Manual/LightMode-Mixed.html"/>
-        public bool supportsMixedLighting => m_MixedLightingSupported;
+        public bool supportsMixedLighting
+        {
+            get => m_MixedLightingSupported;
+            set => m_MixedLightingSupported = value;
+        }
 
         /// <summary>
         /// Returns true if the Render Pipeline Asset supports light cookies, false otherwise.
