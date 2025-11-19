@@ -7,7 +7,7 @@ namespace UnityEngine.Rendering.Universal
     /// <summary>
     /// Class that holds settings related to camera.
     /// </summary>
-    public class UniversalCameraData : ContextItem
+    public partial class UniversalCameraData : ContextItem
     {
         // Internal camera data as we are not yet sure how to expose View in stereo context.
         // We might change this API soon.
@@ -121,7 +121,8 @@ namespace UnityEngine.Rendering.Universal
 #endif
             return m_ProjectionMatrix;
         }
-
+        
+#if URP_COMPATIBILITY_MODE
         /// <summary>
         /// Returns the camera GPU projection matrix. This contains platform specific changes to handle y-flip and reverse z. Includes camera jitter if required by active features.
         /// Similar to <c>GL.GetGPUProjectionMatrix</c> but queries URP internal state to know if the pipeline is rendering to render texture.
@@ -155,10 +156,11 @@ namespace UnityEngine.Rendering.Universal
             return GL.GetGPUProjectionMatrix(GetProjectionMatrixNoJitter(viewIndex), IsCameraProjectionMatrixFlipped());
             #pragma warning restore CS0618
         }
+#endif
 
         internal Matrix4x4 GetGPUProjectionMatrix(bool renderIntoTexture, int viewIndex = 0)
         {
-            return m_JitterMatrix * GL.GetGPUProjectionMatrix(GetProjectionMatrix(viewIndex), renderIntoTexture);
+            return GL.GetGPUProjectionMatrix(GetProjectionMatrix(viewIndex), renderIntoTexture);
         }
 
         /// <summary>
@@ -171,15 +173,14 @@ namespace UnityEngine.Rendering.Universal
         /// By obtaining the pixelWidth of the camera and taking into account the render scale
         /// The min dimension is 1.
         /// </summary>
-        public int scaledWidth => Mathf.Max(1, (int)(camera.pixelWidth * renderScale));
+        public int scaledWidth;
 
         /// <summary>
         /// Returns the scaled height of the Camera
         /// By obtaining the pixelHeight of the camera and taking into account the render scale
         /// The min dimension is 1.
         /// </summary>
-        public int scaledHeight => Mathf.Max(1, (int)(camera.pixelHeight * renderScale));
-
+        public int scaledHeight;
 
         // NOTE: This is internal instead of private to allow ref return in the old CameraData compatibility property.
         // We can make this private when it is removed.
@@ -420,7 +421,8 @@ namespace UnityEngine.Rendering.Universal
 #endif
             return !isBackbuffer;
         }
-
+        
+#if URP_COMPATIBILITY_MODE
         /// <summary>
         /// True if the camera device projection matrix is flipped. This happens when the pipeline is rendering
         /// to a render texture in non OpenGL platforms. If you are doing a custom Blit pass to copy camera textures
@@ -445,6 +447,7 @@ namespace UnityEngine.Rendering.Universal
 
             return true;
         }
+#endif
 
         /// <summary>
         /// True if the render target's projection matrix is flipped. This happens when the pipeline is rendering
@@ -619,11 +622,6 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         internal TaaHistory taaHistory;
 
-        /// <summary>
-        /// The STP history data. It contains both persistent state and textures.
-        /// </summary>
-        internal StpHistory stpHistory;
-
         // TAA settings.
         internal TemporalAA.Settings taaSettings;
 
@@ -634,9 +632,15 @@ namespace UnityEngine.Rendering.Universal
         }
 
         /// <summary>
-        /// Camera at the top of the overlay camera stack
+        /// Camera at the top of the overlay camera stack. If no stack, it equals the camera field present above.
         /// </summary>
         public Camera baseCamera;
+
+        /// <summary>
+        /// Returns true if the baseCamera field is the last base camera being rendered to the frame.
+        /// While the last camera in a camera stack implies a last overlay camera, this indicates the last of all input base cameras.
+        /// </summary>
+        internal bool isLastBaseCamera;
 
         ///<inheritdoc/>
         public override void Reset()
@@ -692,9 +696,9 @@ namespace UnityEngine.Rendering.Universal
             worldSpaceCameraPos = default;
             backgroundColor = Color.black;
             taaHistory = null;
-            stpHistory = null;
             taaSettings = default;
             baseCamera = null;
+            isLastBaseCamera = false;
             stackAnyPostProcessingEnabled = false;
             stackLastCameraOutputToHDR = false;
         }

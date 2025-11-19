@@ -48,7 +48,7 @@ namespace UnityEngine.Rendering.Universal
         /// <summary>
         /// Whether debug overdraw mode is active.
         /// </summary>
-        [Obsolete("overdraw has been deprecated. Use overdrawMode instead.", true)]
+        [Obsolete("overdraw has been deprecated. Use overdrawMode instead. #from(2022.2) #breakingFrom(2023.1)", true)]
 
         public bool overdraw
         {
@@ -259,18 +259,6 @@ namespace UnityEngine.Rendering.Universal
                 setter = (value) => panel.data.fullScreenDebugMode = (DebugFullScreenMode)value,
                 getIndex = () => (int)panel.data.fullScreenDebugMode,
                 setIndex = (value) => panel.data.fullScreenDebugMode = (DebugFullScreenMode)value
-            };
-
-            internal static DebugUI.Widget CreateStpDebugViews(SettingsPanel panel) => new DebugUI.EnumField
-            {
-                nameAndTooltip = Strings.StpDebugViews,
-                isHiddenCallback = () => panel.data.fullScreenDebugMode != DebugFullScreenMode.STP,
-                enumNames = STP.debugViewDescriptions,
-                enumValues = STP.debugViewIndices,
-                getter = () => (int)panel.data.stpDebugViewIndex,
-                setter = (value) => panel.data.stpDebugViewIndex = value,
-                getIndex = () => (int)panel.data.stpDebugViewIndex,
-                setIndex = (value) => panel.data.stpDebugViewIndex = value
             };
 
             internal static DebugUI.Widget CreateMapOverlaySize(SettingsPanel panel) => new DebugUI.Container()
@@ -553,12 +541,10 @@ namespace UnityEngine.Rendering.Universal
                 {
                     displayName = "Rendering Debug",
                     flags = DebugUI.Flags.FrequentlyUsed,
-                    isHeader = true,
                     opened = true,
                     children =
                     {
                         WidgetFactory.CreateMapOverlays(this),
-                        WidgetFactory.CreateStpDebugViews(this),
                         WidgetFactory.CreateMapOverlaySize(this),
                         WidgetFactory.CreateHDR(this),
                         WidgetFactory.CreateMSAA(this),
@@ -575,7 +561,6 @@ namespace UnityEngine.Rendering.Universal
                 AddWidget(new DebugUI.Foldout
                 {
                     displayName = "Pixel Validation",
-                    isHeader = true,
                     opened = true,
                     children =
                     {
@@ -597,7 +582,6 @@ namespace UnityEngine.Rendering.Universal
                 AddWidget(new DebugUI.Foldout
                 {
                     displayName = "HDR Output",
-                    isHeader = true,
                     opened = true,
                     children =
                     {

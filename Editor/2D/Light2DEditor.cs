@@ -1,17 +1,29 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor.EditorTools;
-using UnityEditor.Rendering.Universal.Path2D;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
+#if USING_2DCOMMON
+using UnityEditor.U2D.Common.Path;
+#endif
 
 namespace UnityEditor.Rendering.Universal
 {
+
+
     [CustomEditor(typeof(Light2D))]
     [CanEditMultipleObjects]
-    internal class Light2DEditor : PathComponentEditor<ScriptablePath>
+    internal class Light2DEditor
+#if USING_2DCOMMON
+        : PathComponentEditor<ScriptablePath>
+#else
+        : Editor
+#endif
     {
+
+#if USING_2DCOMMON
+
         [EditorTool("Edit Freeform Shape", typeof(Light2D))]
         class FreeformShapeTool : PathEditorTool<ScriptablePath>
         {
@@ -47,13 +59,9 @@ namespace UnityEditor.Rendering.Universal
                 // This is untracked right now...
                 serializedObject.ApplyModifiedProperties();
             }
-        }
+    }
 
-        private struct ToggleFoldoutResult
-        {
-            public bool foldoutState;
-            public bool toggleState;
-        }
+#endif
 
         private static class Styles
         {
@@ -119,6 +127,9 @@ namespace UnityEditor.Rendering.Universal
             public static string deprecatedParametricLightDialogTitle = "Parametric Light Upgrader";
             public static string deprecatedParametricLightDialogProceed = "Proceed";
             public static string deprecatedParametricLightDialogCancel = "Cancel";
+
+            public static readonly GUIContent buttonText = EditorGUIUtility.TrTextContent("Install 2D Common Package");
+            public static readonly GUIContent helpBox = EditorGUIUtility.TrTextContent("2D Common Package is required to edit Light 2D Shape. Please install it by clicking button above");
         }
 
         const float k_GlobalLightGizmoSize = 1.2f;
@@ -191,10 +202,8 @@ namespace UnityEditor.Rendering.Universal
             }
         }
 
-        private ToggleFoldoutResult DrawHeaderFoldoutWithToggle(GUIContent title, bool foldoutState, bool toggleState, string documentationURL = "")
+        private void DrawHeaderFoldoutWithToggle(GUIContent title, SavedBool foldoutState, SerializedProperty toggleState, string documentationURL = "")
         {
-            ToggleFoldoutResult foldoutResult = new ToggleFoldoutResult();
-
             const float height = 17f;
             var backgroundRect = GUILayoutUtility.GetRect(0, 0);
             float xMin = backgroundRect.xMin;
@@ -204,13 +213,18 @@ namespace UnityEditor.Rendering.Universal
             labelRect.xMin += 16f;
             labelRect.xMax -= 20f;
 
-            foldoutResult.toggleState = GUI.Toggle(labelRect, toggleState, " ");  // Needs a space because the checkbox won't have a proper outline if we don't make a space here
-            foldoutResult.foldoutState = CoreEditorUtils.DrawHeaderFoldout("", foldoutState);
+            bool newToggleState = GUI.Toggle(labelRect, toggleState.boolValue, " ");  // Needs a space because the checkbox won't have a proper outline if we don't make a space here
+            bool newFoldoutState = CoreEditorUtils.DrawHeaderFoldout("", foldoutState.value);
+
+            if (newToggleState != toggleState.boolValue)
+                toggleState.boolValue = newToggleState;
+
+            if (newFoldoutState != foldoutState.value)
+                foldoutState.value = newFoldoutState;
+
+
             labelRect.xMin += 20;
             EditorGUI.LabelField(labelRect, title, EditorStyles.boldLabel);
-
-
-            return foldoutResult;
         }
 
         void OnEnable()
@@ -317,7 +331,10 @@ namespace UnityEditor.Rendering.Universal
         void DrawBlendingGroup()
         {
             CoreEditorUtils.DrawSplitter(false);
-            m_BlendingSettingsFoldout.value = CoreEditorUtils.DrawHeaderFoldout(Styles.blendingSettingsFoldout, m_BlendingSettingsFoldout.value);
+            bool foldoutState = CoreEditorUtils.DrawHeaderFoldout(Styles.blendingSettingsFoldout, m_BlendingSettingsFoldout.value);
+            if (foldoutState != m_BlendingSettingsFoldout.value)
+                m_BlendingSettingsFoldout.value = foldoutState;
+
             if (m_BlendingSettingsFoldout.value)
             {
                 if (!m_AnyBlendStyleEnabled)
@@ -334,9 +351,7 @@ namespace UnityEditor.Rendering.Universal
         {
             CoreEditorUtils.DrawSplitter(false);
 
-            ToggleFoldoutResult result = DrawHeaderFoldoutWithToggle(Styles.shadowsSettingsFoldout, m_ShadowsSettingsFoldout.value, m_ShadowsEnabled.boolValue);
-            m_ShadowsEnabled.boolValue = result.toggleState;
-            m_ShadowsSettingsFoldout.value = result.foldoutState;
+            DrawHeaderFoldoutWithToggle(Styles.shadowsSettingsFoldout, m_ShadowsSettingsFoldout, m_ShadowsEnabled);
 
             if (m_ShadowsSettingsFoldout.value)
             {
@@ -354,9 +369,8 @@ namespace UnityEditor.Rendering.Universal
         {
             CoreEditorUtils.DrawSplitter(false);
 
-            ToggleFoldoutResult result = DrawHeaderFoldoutWithToggle(Styles.volumetricSettingsFoldout, m_VolumetricSettingsFoldout.value, m_VolumetricEnabled.boolValue);
-            m_VolumetricSettingsFoldout.value = result.foldoutState;
-            m_VolumetricEnabled.boolValue = result.toggleState;
+            DrawHeaderFoldoutWithToggle(Styles.volumetricSettingsFoldout, m_VolumetricSettingsFoldout, m_VolumetricEnabled);
+
             if (m_VolumetricSettingsFoldout.value)
             {
                 EditorGUI.indentLevel++;
@@ -375,7 +389,10 @@ namespace UnityEditor.Rendering.Universal
         void DrawNormalMapGroup()
         {
             CoreEditorUtils.DrawSplitter(false);
-            m_NormalMapsSettingsFoldout.value = CoreEditorUtils.DrawHeaderFoldout(Styles.normalMapsSettingsFoldout, m_NormalMapsSettingsFoldout.value);
+            bool foldoutState = CoreEditorUtils.DrawHeaderFoldout(Styles.normalMapsSettingsFoldout, m_NormalMapsSettingsFoldout.value);
+            if (foldoutState != m_NormalMapsSettingsFoldout.value)
+                m_NormalMapsSettingsFoldout.value = foldoutState;
+
             if (m_NormalMapsSettingsFoldout.value)
             {
                 EditorGUILayout.PropertyField(m_NormalMapQuality, Styles.generalNormalMapLightQuality);
@@ -599,9 +616,16 @@ namespace UnityEditor.Rendering.Universal
 
             if (m_LightType.intValue == (int)Light2D.LightType.Freeform)
             {
+#if USING_2DCOMMON
                 DoEditButton<FreeformShapeTool>(PathEditorToolContents.icon, "Edit Shape");
                 DoPathInspector<FreeformShapeTool>();
-                DoSnappingInspector<FreeformShapeTool>();
+#else
+                var clicked = GUILayout.Button(Styles.buttonText);
+                if (clicked)
+                    URP2DConverterUtility.InstallPackage("com.unity.2d.common");
+                else
+                    EditorGUILayout.HelpBox(Styles.helpBox.text, MessageType.Info);
+#endif
             }
 
             DrawFoldouts();
@@ -886,4 +910,5 @@ namespace UnityEditor.Rendering.Universal
                 light.MarkForUpdate();
         }
     }
+
 }

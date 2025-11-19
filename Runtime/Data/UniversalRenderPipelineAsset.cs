@@ -9,6 +9,8 @@ using System.ComponentModel;
 using UnityEngine.Serialization;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
+using UnityEngine.Assertions;
+using System.Collections.Generic;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -247,7 +249,7 @@ namespace UnityEngine.Rendering.Universal
     /// <summary>
     /// Defines if profiling is logged or not. This enum is not longer in use, use the Profiler instead.
     /// </summary>
-    [Obsolete("PipelineDebugLevel is replaced to use the profiler and has no effect.", true)]
+    [Obsolete("PipelineDebugLevel is replaced to use the profiler and has no effect. #from(2022.2) #breakingFrom(2023.1)", true)]
     public enum PipelineDebugLevel
     {
         /// <summary>
@@ -361,13 +363,11 @@ namespace UnityEngine.Rendering.Universal
         /// Unity uses the AMD FSR 1.0 technique to perform upscaling.
         /// </summary>
         [InspectorName("FidelityFX Super Resolution 1.0"), Tooltip("If the target device does not support Unity shader model 4.5, Unity falls back to the Automatic option.")]
-        FSR,
+        FSR
 
-        /// <summary>
-        /// Unity uses the Spatial-Temporal Post-Processing technique to perform upscaling.
-        /// </summary>
-        [InspectorName("Spatial-Temporal Post-Processing"), Tooltip("If the target device does not support compute shaders or is running GLES, Unity falls back to the Automatic option.")]
-        STP
+#if ENABLE_UPSCALER_FRAMEWORK
+        IUpscaler // Should always be last
+#endif
     }
 
     /// <summary>
@@ -379,7 +379,11 @@ namespace UnityEngine.Rendering.Universal
         BayerMatrix,
 
         /// <summary>Unity uses the precomputed blue noise texture to compute the LOD cross-fade dithering.</summary>
-        BlueNoise
+        BlueNoise,
+
+        /// <summary>Unity uses stencil test to make 2x2 pixel dithering pattern by using 2 stencil bits (4 and 8). This option significantly decreases the number of the shader variants, while GPU performance cost becomes slightly higher.</summary>
+        [InspectorName("2x2 Stencil"), Tooltip("2x2 pixel dithering pattern by stencil test with 2 stencil bits (4 and 8). This option decreases the number of the shader variants.")]
+        Stencil
     }
 
     /// <summary>
@@ -410,10 +414,27 @@ namespace UnityEngine.Rendering.Universal
         PerPixel = 3,
     }
 
+#if URP_COMPATIBILITY_MODE
     internal struct DeprecationMessage
     {
         internal const string CompatibilityScriptingAPIObsolete = "This rendering path is for compatibility mode only (when Render Graph is disabled). Use Render Graph API instead.";
+        internal const string CompatibilityScriptingAPIObsoleteFrom2023_3 = CompatibilityScriptingAPIObsolete + " #from(2023.3)";
+        internal const string CompatibilityScriptingAPIConsoleWarning = "Your project uses Compatibility Mode, which disables the render graph system. Compatibility Mode is deprecated. Migrate your ScriptableRenderPasses to the Render Graph API instead. After you migrate, go to Edit > Project Settings > Player and remove the URP_COMPATIBILITY_MODE define from the Scripting Define Symbols. If you don't remove the define, build time and build size are slightly increased.";
     }
+#endif
+
+#if UNITY_EDITOR && URP_COMPATIBILITY_MODE
+    internal class WarnUsingNonRenderGraph
+    {
+        [InitializeOnLoadMethod]
+        internal static void EmitConsoleWarning()
+        {
+            RenderGraphSettings rgs = GraphicsSettings.GetRenderPipelineSettings<RenderGraphSettings>();
+            if (rgs != null && rgs.enableRenderCompatibilityMode)
+                Debug.LogWarning(DeprecationMessage.CompatibilityScriptingAPIConsoleWarning);
+        }
+    }
+#endif
 
     /// <summary>
     /// The asset that contains the URP setting.
@@ -423,16 +444,17 @@ namespace UnityEngine.Rendering.Universal
     /// <see cref="UniversalRenderPipeline"/>
     [ExcludeFromPreset]
     [URPHelpURL("universalrp-asset")]
+    [Icon("UnityEngine/Rendering/RenderPipelineAsset Icon")]
 #if UNITY_EDITOR
     [ShaderKeywordFilter.ApplyRulesIfTagsEqual("RenderPipeline", "UniversalPipeline")]
 #endif
-    public partial class UniversalRenderPipelineAsset : RenderPipelineAsset<UniversalRenderPipeline>, ISerializationCallbackReceiver, IProbeVolumeEnabledRenderPipeline, IGPUResidentRenderPipeline, IRenderGraphEnabledRenderPipeline, ISTPEnabledRenderPipeline
+    public partial class UniversalRenderPipelineAsset : RenderPipelineAsset<UniversalRenderPipeline>, ISerializationCallbackReceiver, IProbeVolumeEnabledRenderPipeline, IGPUResidentRenderPipeline, IRenderGraphEnabledRenderPipeline
     {
         ScriptableRenderer[] m_Renderers = new ScriptableRenderer[1];
 
         internal bool IsAtLastVersion() => k_LastVersion == k_AssetVersion;
 
-        private const int k_LastVersion = 12;
+        private const int k_LastVersion = 13;
         // Default values set when a new UniversalRenderPipeline asset is created
         [SerializeField] int k_AssetVersion = k_LastVersion;
         [SerializeField] int k_AssetPreviousVersion = k_LastVersion;
@@ -440,7 +462,7 @@ namespace UnityEngine.Rendering.Universal
         // Deprecated settings for upgrading sakes
         [SerializeField] RendererType m_RendererType = RendererType.UniversalRenderer;
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Use m_RendererDataList instead.")]
+        [Obsolete("Use m_RendererDataList instead. #from(2023.1)")]
         [SerializeField] internal ScriptableRendererData m_RendererData = null;
 
         // Renderer settings
@@ -459,6 +481,15 @@ namespace UnityEngine.Rendering.Universal
         [SerializeField] MsaaQuality m_MSAA = MsaaQuality.Disabled;
         [SerializeField] float m_RenderScale = 1.0f;
         [SerializeField] UpscalingFilterSelection m_UpscalingFilter = UpscalingFilterSelection.Auto;
+        // The upscaler name is null if the upscaling filter is coming from a built-in upscaler. It will be non-null if
+        // the upscaling filter is coming from an IUpscaler, which can be a separate package, or part of Unity code.
+#if ENABLE_UPSCALER_FRAMEWORK
+        [SerializeField] string m_IUpscalerName = string.Empty;
+
+        [SerializeField]
+        [SerializeReference]
+        List<UpscalerOptions> m_UpscalerOptions = new List<UpscalerOptions>();
+#endif
         [SerializeField] bool m_FsrOverrideSharpness = false;
         [SerializeField] float m_FsrSharpness = FSRUtils.kDefaultSharpnessLinear;
 
@@ -466,6 +497,7 @@ namespace UnityEngine.Rendering.Universal
         [ShaderKeywordFilter.RemoveIf(false, keywordNames: ShaderKeywordStrings.LOD_FADE_CROSSFADE)]
 #endif
         [SerializeField] bool m_EnableLODCrossFade = true;
+
         [SerializeField] LODCrossFadeDitheringType m_LODCrossFadeDitheringType = LODCrossFadeDitheringType.BlueNoise;
 
         // ShEvalMode.Auto is handled in shader preprocessor.
@@ -510,14 +542,9 @@ namespace UnityEngine.Rendering.Universal
         [SerializeField] int m_AdditionalLightsShadowResolutionTierHigh = AdditionalLightsDefaultShadowResolutionTierHigh;
 
         // Reflection Probes
-#if UNITY_EDITOR // multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
-        [ShaderKeywordFilter.SelectOrRemove(true, keywordNames: ShaderKeywordStrings.ReflectionProbeBlending)]
-#endif
         [SerializeField] bool m_ReflectionProbeBlending = false;
-#if UNITY_EDITOR // multi_compile_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
-        [ShaderKeywordFilter.SelectOrRemove(true, keywordNames: ShaderKeywordStrings.ReflectionProbeBoxProjection)]
-#endif
         [SerializeField] bool m_ReflectionProbeBoxProjection = false;
+        [SerializeField] bool m_ReflectionProbeAtlas = true;
 
         // Shadows Settings
         [SerializeField] float m_ShadowDistance = 50.0f;
@@ -564,7 +591,7 @@ namespace UnityEngine.Rendering.Universal
         [ShaderKeywordFilter.SelectOrRemove(true, keywordNames: ShaderKeywordStrings.LightLayers)]
 #endif
         [SerializeField] bool m_SupportsLightLayers = false;
-        [SerializeField] [Obsolete("",true)] PipelineDebugLevel m_DebugLevel;
+        [SerializeField] [Obsolete("#from(2022.1) #breakingFrom(2023.1)", true)] PipelineDebugLevel m_DebugLevel;
         [SerializeField] StoreActionsOptimization m_StoreActionsOptimization = StoreActionsOptimization.Auto;
 
         // Adaptive performance settings
@@ -667,6 +694,18 @@ namespace UnityEngine.Rendering.Universal
 #if UNITY_EDITOR
         public static readonly string packagePath = "Packages/com.unity.render-pipelines.universal";
 
+        internal void Reset()
+        {
+            // If the asset path is valid, it means we are explicitly resetting an existing asset, so we will create
+            // a new default renderer asset to avoid errors. If the path is invalid, it means we are creating a new asset
+            // for which the default renderer is provided through UniversalRenderPipelineAsset.Create.
+            string path = AssetDatabase.GetAssetPath(this);
+            if (!string.IsNullOrEmpty(path))
+            {
+                m_RendererDataList[0] = CreateRendererAsset(path, m_RendererType);
+            }
+        }
+
         public static UniversalRenderPipelineAsset Create(ScriptableRendererData rendererData = null)
         {
             // Create Universal RP Asset
@@ -697,7 +736,7 @@ namespace UnityEngine.Rendering.Universal
         static void CreateUniversalPipeline()
         {
             ProjectWindowUtil.StartNameEditingIfProjectWindowExists(0, CreateInstance<CreateUniversalPipelineAsset>(),
-                "New Universal Render Pipeline Asset.asset", null, null);
+                "New Universal Render Pipeline Asset.asset", CoreUtils.GetIconForType<UniversalRenderPipelineAsset>(), null);
         }
 
         internal static ScriptableRendererData CreateRendererAsset(string path, RendererType type, bool relativePath = true, string suffix = "Renderer")
@@ -1097,6 +1136,39 @@ namespace UnityEngine.Rendering.Universal
             set => m_UpscalingFilter = value;
         }
 
+
+        /// <summary>
+        /// Returns the name of the selected upscaling filter.
+        /// </summary>
+        public string upscalerName
+        {
+#if ENABLE_UPSCALER_FRAMEWORK
+            get => m_IUpscalerName;
+#else
+            get => string.Empty;
+#endif
+        }
+
+#if ENABLE_UPSCALER_FRAMEWORK
+
+        public List<UpscalerOptions> iUpscalerOptions
+        {
+            get => m_UpscalerOptions;
+        }
+
+        public UpscalerOptions GetIUpscalerOptions(string UpscalerName)
+        {
+            foreach(UpscalerOptions option in m_UpscalerOptions)
+            {
+                if (option == null)
+                    continue;
+                if (option.UpscalerName == UpscalerName)
+                    return option;
+            }
+            return null;
+        }
+#endif
+
         /// <summary>
         /// If this property is set to true, the value from the fsrSharpness property will control the intensity of the
         /// sharpening filter associated with FidelityFX Super Resolution.
@@ -1158,7 +1230,7 @@ namespace UnityEngine.Rendering.Universal
         /// <summary>
         /// Support GPU Streaming for Probe Volumes.
         /// </summary>
-        [Obsolete( "This is obsolete, use supportProbeVolumeGPUStreaming instead.")]
+        [Obsolete( "This is obsolete, use supportProbeVolumeGPUStreaming instead. #from(2023.3)")]
         public bool supportProbeVolumeStreaming
         {
             get => m_SupportProbeVolumeGPUStreaming;
@@ -1268,8 +1340,7 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         public bool supportsAdditionalLightShadows
         {
-            get => m_AdditionalLightShadowsSupported;
-            set
+            get => m_AdditionalLightShadowsSupported; set
             {
                 m_AdditionalLightShadowsSupported = value;
 #if UNITY_EDITOR
@@ -1337,6 +1408,15 @@ namespace UnityEngine.Rendering.Universal
             internal set => m_ReflectionProbeBlending = value;
         }
 
+        internal bool ShouldUseReflectionProbeBlending()
+        {
+            // The probe blending with atlas code path is always force enabled with GPUResidentDrawer since that is the only path supported here.
+            if (gpuResidentDrawerMode != GPUResidentDrawerMode.Disabled)
+                return true;
+
+            return reflectionProbeBlending;
+        }
+
         /// <summary>
         /// Specifies if this <c>UniversalRenderPipelineAsset</c> should allow box projection for the reflection probes in the scene.
         /// </summary>
@@ -1344,6 +1424,29 @@ namespace UnityEngine.Rendering.Universal
         {
             get => m_ReflectionProbeBoxProjection;
             set => m_ReflectionProbeBoxProjection = value;
+        }
+
+        /// <summary>
+        /// Specifies if this <c>UniversalRenderPipelineAsset</c> should use the reflection probe atlas for Forward Plus.
+        /// </summary>
+        public bool reflectionProbeAtlas
+        {
+            get => m_ReflectionProbeAtlas;
+            internal set => m_ReflectionProbeAtlas = value;
+        }
+
+        internal bool ShouldUseReflectionProbeAtlasBlending(RenderingMode renderingMode)
+        {
+            var useProbeBlending = ShouldUseReflectionProbeBlending();
+
+            // The probe blending with atlas code path is always force enabled with GPUResidentDrawer since that is the only path supported here.
+            if (gpuResidentDrawerMode != GPUResidentDrawerMode.Disabled)
+            {
+                Assert.IsTrue(useProbeBlending);
+                return true;
+            }
+
+            return useProbeBlending && (reflectionProbeAtlas || renderingMode == RenderingMode.DeferredPlus);
         }
 
         /// <summary>
@@ -1474,7 +1577,7 @@ namespace UnityEngine.Rendering.Universal
         /// <summary>
         /// Returns true if the Render Pipeline Asset supports light layers, false otherwise.
         /// </summary>
-        [Obsolete("This is obsolete, use useRenderingLayers instead.", true)]
+        [Obsolete("This is obsolete, use useRenderingLayers instead. #from(2023.1) #breakingFrom(2023.1)", true)]
         public bool supportsLightLayers => m_SupportsLightLayers;
 
         /// <summary>
@@ -1500,7 +1603,7 @@ namespace UnityEngine.Rendering.Universal
         /// <summary>
         /// Previously returned the debug level for this Render Pipeline Asset but is now deprecated. Replaced to use the profiler and is no longer used.
         /// </summary>
-        [Obsolete("PipelineDebugLevel is deprecated and replaced to use the profiler. Calling debugLevel is not necessary.", true)]
+        [Obsolete("PipelineDebugLevel is deprecated and replaced to use the profiler. Calling debugLevel is not necessary. #from(2022.2) #breakingFrom(2023.1)", true)]
         public PipelineDebugLevel debugLevel => PipelineDebugLevel.Disabled;
 
         /// <summary>
@@ -1516,8 +1619,9 @@ namespace UnityEngine.Rendering.Universal
         /// <summary>
         /// Controls whether the RenderGraph render path is enabled.
         /// </summary>
-        [Obsolete("This has been deprecated, please use GraphicsSettings.GetRenderPipelineSettings<RenderGraphSettings>().enableRenderCompatibilityMode instead.")]
+        [Obsolete("This has been deprecated, please use GraphicsSettings.GetRenderPipelineSettings<RenderGraphSettings>().enableRenderCompatibilityMode instead. #from(2023.3)")]
         public bool enableRenderGraph
+#if URP_COMPATIBILITY_MODE
         {
             get
             {
@@ -1527,6 +1631,9 @@ namespace UnityEngine.Rendering.Universal
                 return false;
             }
         }
+#else
+            => true;
+#endif
 
         internal void OnEnableRenderGraphChanged()
         {
@@ -1605,17 +1712,17 @@ namespace UnityEngine.Rendering.Universal
         public override string renderPipelineShaderTag => UniversalRenderPipeline.k_ShaderTagName;
 
         /// <summary>Names used for display of rendering layer masks.</summary>
-        [Obsolete("This property is obsolete. Use RenderingLayerMask API and Tags & Layers project settings instead. #from(23.3)", false)]
+        [Obsolete("This property is obsolete. Use RenderingLayerMask API and Tags & Layers project settings instead. #from(2023.3)")]
         public override string[] renderingLayerMaskNames => RenderingLayerMask.GetDefinedRenderingLayerNames();
 
         /// <summary>Names used for display of rendering layer masks with prefix.</summary>
-        [Obsolete("This property is obsolete. Use RenderingLayerMask API and Tags & Layers project settings instead. #from(23.3)", false)]
+        [Obsolete("This property is obsolete. Use RenderingLayerMask API and Tags & Layers project settings instead. #from(2023.3)")]
         public override string[] prefixedRenderingLayerMaskNames => Array.Empty<string>();
 
         /// <summary>
         /// Names used for display of light layers.
         /// </summary>
-        [Obsolete("This is obsolete, please use renderingLayerMaskNames instead.", true)]
+        [Obsolete("This is obsolete, please use renderingLayerMaskNames instead. #from(2023.1) #breakingFrom(2023.1)", true)]
         public string[] lightLayerMaskNames => new string[0];
 
         /// <summary>
@@ -1653,16 +1760,17 @@ namespace UnityEngine.Rendering.Universal
         static class Strings
         {
             public static readonly string notURPRenderer = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not being {nameof(UniversalRendererData)}.";
-            public static readonly string forwardPlusMissing = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not supporting Forward+.";
+            public static readonly string renderingModeIncompatible = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not using the Forward+ or Deferred+ rendering paths.";
         }
 
         /// <inheritdoc/>
-        public bool IsGPUResidentDrawerSupportedBySRP(out string message, out LogType severty)
+        public bool IsGPUResidentDrawerSupportedBySRP(out string message, out LogType severity)
         {
             message = string.Empty;
-            severty = LogType.Warning;
+            severity = LogType.Warning;
 
-            // if any of the renderers are not set to Forward+ return false
+            // Only the URP rendering paths using the cluster light loop (F+ lights & probes) can be used with GRD,
+            // since BiRP-style per-object lights and reflection probes are incompatible with DOTS instancing.
             foreach (var rendererData in m_RendererDataList)
             {
                 if (rendererData is not UniversalRendererData universalRendererData)
@@ -1671,11 +1779,11 @@ namespace UnityEngine.Rendering.Universal
                     return false;
                 }
 
-                if (universalRendererData.renderingMode == RenderingMode.ForwardPlus)
-                    continue;
-
-                message = Strings.forwardPlusMissing;
-                return false;
+                if (!universalRendererData.usesClusterLightLoop)
+                {
+                    message = Strings.renderingModeIncompatible;
+                    return false;
+                }
             }
 
             return true;
@@ -1805,19 +1913,25 @@ namespace UnityEngine.Rendering.Universal
                 k_AssetPreviousVersion = k_AssetVersion;
                 k_AssetVersion = 12;
             }
+            
+            if (k_AssetVersion < 13)
+            {
+                k_AssetPreviousVersion = k_AssetVersion;
+                k_AssetVersion = 13;
+            }
 
 #if UNITY_EDITOR
             if (k_AssetPreviousVersion != k_AssetVersion)
             {
-                EditorApplication.delayCall += () => UpgradeAsset(this.GetInstanceID());
+                EditorApplication.delayCall += () => UpgradeAsset(this.GetEntityId());
             }
 #endif
         }
 
 #if UNITY_EDITOR
-        static void UpgradeAsset(int assetInstanceID)
+        static void UpgradeAsset(EntityId assetInstanceID)
         {
-            UniversalRenderPipelineAsset asset = EditorUtility.InstanceIDToObject(assetInstanceID) as UniversalRenderPipelineAsset;
+            UniversalRenderPipelineAsset asset = EditorUtility.EntityIdToObject(assetInstanceID) as UniversalRenderPipelineAsset;
 
             if (asset.k_AssetPreviousVersion < 5)
             {
@@ -1868,6 +1982,11 @@ namespace UnityEngine.Rendering.Universal
                     globalSettings.apvScenesData = asset.apvScenesData;
 #pragma warning restore CS0618 // Type or member is obsolete
                 asset.k_AssetPreviousVersion = 12;
+            }
+            
+            if (asset.k_AssetPreviousVersion < 13)
+            {
+                asset.k_AssetPreviousVersion = 13;
             }
 
             ResourceReloader.ReloadAllNullIn(asset, packagePath);
@@ -1942,7 +2061,7 @@ namespace UnityEngine.Rendering.Universal
         /// <summary>
         /// Returns the projects global ProbeVolumeSceneData instance.
         /// </summary>
-        [Obsolete("This property is no longer necessary.")]
+        [Obsolete("This property is no longer necessary. #from(2023.3)")]
         public ProbeVolumeSceneData probeVolumeSceneData => null;
 
         /// <summary>
@@ -1950,7 +2069,14 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         public bool isStpUsed
         {
-            get { return m_UpscalingFilter == UpscalingFilterSelection.STP; }
+            get
+            {
+                return false
+#if ENABLE_UPSCALER_FRAMEWORK
+                || m_UpscalingFilter == UpscalingFilterSelection.IUpscaler
+#endif
+                ;
+            }
         }
     }
 }
