@@ -221,6 +221,10 @@ namespace UnityEngine.Rendering.Universal
         internal static Upscaling upscaling;
 #endif
 
+#if KILLITMYSELF_URP        
+        private CommandBuffer BeanShootout_EarlyCmd;
+#endif        
+
         /// <summary>
         /// Creates a new <c>UniversalRenderPipeline</c> instance.
         /// </summary>
@@ -261,10 +265,12 @@ namespace UnityEngine.Rendering.Universal
             var defaultVolumeProfileSettings = GraphicsSettings.GetRenderPipelineSettings<URPDefaultVolumeProfileSettings>();
             VolumeManager.instance.Initialize(defaultVolumeProfileSettings.volumeProfile, asset.volumeProfile);
 
+#if !KILLITMYSELF_URP            
             // Configure initial XR settings
             MSAASamples msaaSamples = (MSAASamples)Mathf.Clamp(Mathf.NextPowerOfTwo(QualitySettings.antiAliasing), (int)MSAASamples.None, (int)MSAASamples.MSAA8x);
             XRSystem.SetDisplayMSAASamples(msaaSamples);
             XRSystem.SetRenderScale(asset.renderScale);
+#endif
 
             Lightmapping.SetDelegate(lightsDelegate);
 
@@ -313,12 +319,22 @@ namespace UnityEngine.Rendering.Universal
                 });
             }
 
+#if !KILLITMYSELF_URP            
             // Initializes only if VRS is supported.
             Vrs.InitializeResources();
+#endif
 
 #if ENABLE_UPSCALER_FRAMEWORK
             upscaling = new Upscaling(asset.iUpscalerOptions);
 #endif
+            
+#if KILLITMYSELF_URP            
+            BeanShootout_EarlyCmd = new();
+            BeanShootout_EarlyCmd.ClearRenderTarget(false, true, new Color(0.005f, 0.004f, 0.004f));
+            
+            GraphicsSettings.lightsUseLinearIntensity = true;
+            GraphicsSettings.lightsUseColorTemperature = true;
+#endif            
         }
 
         /// <inheritdoc/>
@@ -361,6 +377,10 @@ namespace UnityEngine.Rendering.Universal
 
             DisposeAdditionalCameraData();
             AdditionalLightsShadowAtlasLayout.ClearStaticCaches();
+            
+#if KILLITMYSELF_URP            
+            BeanShootout_EarlyCmd.Dispose();
+#endif            
         }
 
         // If the URP gets destroyed, we must clean up all the added URP specific camera data and
@@ -435,7 +455,13 @@ namespace UnityEngine.Rendering.Universal
         /// <inheritdoc/>
         protected override void Render(ScriptableRenderContext renderContext, List<Camera> cameras)
         {
+#if KILLITMYSELF_URP            
+            Graphics.ExecuteCommandBuffer(BeanShootout_EarlyCmd);
+#endif            
+            
+#if !KILLITMYSELF_URP
             SetHDRState(cameras);
+#endif
 
             int cameraCount = cameras.Count;
             // For XR, HDR and no camera cases, UI Overlay ownership must be enforced
@@ -444,7 +470,9 @@ namespace UnityEngine.Rendering.Universal
             // Bandwidth optimization with Render Graph in some circumstances
             SetupScreenMSAASamplesState(cameraCount);
 
+#if UNITY_EDITOR            
             GPUResidentDrawer.ReinitializeIfNeeded();
+#endif            
 
             // TODO: Would be better to add Profiling name hooks into RenderPipelineManager.
             // C#8 feature, only in >= 2020.2
@@ -452,10 +480,12 @@ namespace UnityEngine.Rendering.Universal
 
             using (new ContextRenderingScope(renderContext, cameras))
             {
+#if !KILLITMYSELF_URP
                 GraphicsSettings.lightsUseLinearIntensity = (QualitySettings.activeColorSpace == ColorSpace.Linear);
                 GraphicsSettings.lightsUseColorTemperature = true;
                 SetupPerFrameShaderConstants();
                 XRSystem.SetDisplayMSAASamples((MSAASamples)asset.msaaSampleCount);
+#endif
 
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
                 if (DebugManager.instance.isAnyDebugUIActive)
@@ -581,7 +611,7 @@ namespace UnityEngine.Rendering.Universal
                 }
 
                 camera.targetTexture = temporaryRT ? temporaryRT : destination;
-
+                
                 if (standardRequest != null)
                 {
                     Render(context, new List<Camera>{ camera });
@@ -761,7 +791,11 @@ namespace UnityEngine.Rendering.Universal
 
             // TODO: move skybox code from C++ to URP in order to remove the call to context.Submit() inside DrawSkyboxPass
             // Until then, we can't use nested profiling scopes with XR multipass
+#if !KILLITMYSELF_URP
             CommandBuffer cmdScope = cameraData.xr.enabled ? null : cmd;
+#else
+            CommandBuffer cmdScope = cmd;
+#endif
 
             var cameraMetadata = CameraMetadataCache.GetCached(camera);
             using (new ProfilingScope(cmdScope, cameraMetadata.sampler)) // Enqueues a "BeginSample" command into the CommandBuffer cmd
@@ -812,9 +846,12 @@ namespace UnityEngine.Rendering.Universal
                 if (supportProbeVolume)
                     ProbeReferenceVolume.instance.BindAPVRuntimeResources(cmd, true);
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                 // Must be called before culling because it emits intermediate renderers via Graphics.DrawInstanced.
                 ProbeReferenceVolume.instance.RenderDebug(camera, apvOptions, Texture2D.whiteTexture);
+#endif
 
+#if !KILLITMYSELF_URP
                 // Update camera motion tracking (prev matrices) from cameraData.
                 // Called and updated only once, as the same camera can be rendered multiple times.
                 // NOTE: Tracks only the current (this) camera, not shadow views or any other offscreen views.
@@ -828,6 +865,7 @@ namespace UnityEngine.Rendering.Universal
                 // NOTE: Shared between both Execute and Render (RG) paths.
                 if (cameraData.taaHistory != null)
                     UpdateTemporalAATargets(cameraData);
+#endif
 
                 RTHandles.SetReferenceSize(cameraData.cameraTargetDescriptor.width, cameraData.cameraTargetDescriptor.height);
 
@@ -837,7 +875,9 @@ namespace UnityEngine.Rendering.Universal
                 var data = frameData.Create<UniversalRenderingData>();
                 data.cullResults = context.Cull(ref cullingParameters);
 
+#if !KILLITMYSELF_URP
                 GPUResidentDrawer.PostCullBeginCameraRendering(new RenderRequestBatcherContext { commandBuffer = cmd });
+#endif
 
                 RenderingMode? renderingMode = (cameraData.renderer as UniversalRenderer)?.renderingModeActual;
 
@@ -857,7 +897,10 @@ namespace UnityEngine.Rendering.Universal
                 }
 
                 RenderingData legacyRenderingData = new RenderingData(frameData);
+                
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                 CheckAndApplyDebugSettings(ref legacyRenderingData);
+#endif
 
 #if ENABLE_ADAPTIVE_PERFORMANCE
                 if (asset?.useAdaptivePerformance == true)
@@ -946,13 +989,20 @@ namespace UnityEngine.Rendering.Universal
             // Renderer contains a stack if it has additional data and the renderer supports stacking
             // The renderer is checked if it supports Base camera. Since Base is the only relevant type at this moment.
             var renderer = GetRenderer(baseCamera, baseCameraAdditionalData);
+            
+#if !KILLITMYSELF_URP            
             bool supportsCameraStacking = renderer != null && renderer.SupportsCameraStackingType(CameraRenderType.Base);
             List<Camera> stackedOverlayCameras = (supportsCameraStacking) ? baseCameraAdditionalData?.cameraStack : null;
+#endif
 
             // We use this bool to check if post processing is enabled for any cameras of the stack
             bool stackAnyPostProcessingEnabled = baseCameraAdditionalData != null && baseCameraAdditionalData.renderPostProcessing;
+            
+#if !KILLITMYSELF_URP            
             bool mainHdrDisplayOutputActive = HDROutputForMainDisplayIsActive();
+#endif
 
+#if !KILLITMYSELF_URP            
             // We need to know the last active camera in the stack to be able to resolve
             // rendering to screen when rendering it. The last camera in the stack is not
             // necessarily the last active one as it users might disable it.
@@ -1013,18 +1063,27 @@ namespace UnityEngine.Rendering.Universal
                     baseCameraAdditionalData.UpdateCameraStack();
                 }
             }
-
+            
             bool isStackedRendering = lastActiveOverlayCameraIndex != -1;
-
+#endif
+            
             // Prepare XR rendering
+#if !KILLITMYSELF_URP
             var xrActive = false;
             var xrRendering = baseCameraAdditionalData?.allowXRRendering ?? true;
+#endif
+            
             var xrLayout = XRSystem.NewLayout();
+#if !KILLITMYSELF_URP            
             xrLayout.AddCamera(baseCamera, xrRendering);
-
+#else
+            xrLayout.AddCamera(baseCamera, false);
+#endif            
+            
             // With XR multi-pass enabled, each camera can be rendered multiple times with different parameters
             foreach ((Camera _, XRPass xrPass) in xrLayout.GetActivePasses())
             {
+#if !KILLITMYSELF_URP                
                 var xrPassUniversal = xrPass as XRPassUniversal;
                 if (xrPass.enabled)
                 {
@@ -1035,8 +1094,12 @@ namespace UnityEngine.Rendering.Universal
                     float scaleToApply = XRSystem.GetRenderViewportScale();
                     ScalableBufferManager.ResizeBuffers(scaleToApply, scaleToApply);
                 }
+#endif
 
+#if !KILLITMYSELF_URP                
                 bool finalOutputHDR = false;
+#endif
+                
 #if VISUAL_EFFECT_GRAPH_0_0_1_OR_NEWER
                 VFX.VFXCameraXRSettings cameraXRSettings;
 #endif
@@ -1066,7 +1129,11 @@ namespace UnityEngine.Rendering.Universal
 #endif
                     // InitializeAdditionalCameraData needs to be initialized after the cameraTargetDescriptor is set because it needs to know the
                     // msaa level of cameraTargetDescriptor and XR modifications.
+#if !KILLITMYSELF_URP                    
                     InitializeAdditionalCameraData(baseCamera, baseCameraAdditionalData, !isStackedRendering, isLastBaseCamera, baseCameraData);
+#else
+                    InitializeAdditionalCameraData(baseCamera, baseCameraAdditionalData, true, isLastBaseCamera, baseCameraData);
+#endif                    
 
 #if VISUAL_EFFECT_GRAPH_0_0_1_OR_NEWER
                     //It should be called before culling to prepare material. When there isn't any VisualEffect component, this method has no effect.
@@ -1082,14 +1149,18 @@ namespace UnityEngine.Rendering.Universal
                     // update the base camera flag so that the scene depth is stored if needed by overlay cameras later in the frame
                     baseCameraData.postProcessingRequiresDepthTexture |= stackedOverlayCamerasRequireDepthForPostProcessing;
 
+#if !KILLITMYSELF_URP                    
                     // Check whether the camera stack final output is HDR
                     // This is equivalent of UniversalCameraData.isHDROutputActive but without necessiting the base camera to be the last camera in the stack.
                     bool hdrDisplayOutputActive = mainHdrDisplayOutputActive;
+#endif
 #if ENABLE_VR && ENABLE_XR_MODULE
                     // If we are rendering to xr then we need to look at the XR Display rather than the main non-xr display.
                     if (xrPass.enabled)
                         hdrDisplayOutputActive = xrPass.isHDRDisplayOutputActive;
 #endif
+
+#if !KILLITMYSELF_URP                    
                     finalOutputHDR =
                         asset.supportsHDR &&
                         hdrDisplayOutputActive // Check whether any HDR display is active and the render pipeline asset allows HDR rendering
@@ -1097,18 +1168,24 @@ namespace UnityEngine.Rendering.Universal
                         (baseCamera.cameraType == CameraType.Game ||
                          baseCamera.cameraType == CameraType.VR) // Check whether the stack outputs to a screen
                         && baseCameraData.allowHDROutput; // Check whether the base camera allows HDR output
+#endif
 
                     // Update stack-related parameters
                     baseCameraData.stackAnyPostProcessingEnabled = stackAnyPostProcessingEnabled;
+#if !KILLITMYSELF_URP                    
                     baseCameraData.stackLastCameraOutputToHDR = finalOutputHDR;
+#else
+                    baseCameraData.stackLastCameraOutputToHDR = false;
+#endif                    
 
                     RenderSingleCamera(context, baseCameraData);
                 }
 
+#if !KILLITMYSELF_URP                
                 // Late latching is not supported after this point
                 if (xrPass.enabled)
                     XRSystemUniversal.EndLateLatching(baseCamera, xrPassUniversal);
-
+            
                 // Overlay Cameras Rendering
                 if (isStackedRendering)
                 {
@@ -1159,8 +1236,10 @@ namespace UnityEngine.Rendering.Universal
                         }
                     }
                 }
+#endif
             }
 
+#if !KILLITMYSELF_URP        
             if (xrActive)
             {
                 CommandBuffer cmd = CommandBufferPool.Get();
@@ -1169,6 +1248,7 @@ namespace UnityEngine.Rendering.Universal
                 context.Submit();
                 CommandBufferPool.Release(cmd);
             }
+#endif
 
             XRSystem.EndLayout();
         }
