@@ -277,12 +277,18 @@ namespace UnityEngine.Rendering.Universal.Internal
                     }
                 }
 
-                passData.cameraData.xr.StopSinglePass(cmd);
-
+                if (BeanShootoutURP.EnableXRRenderingSupport)
+                {
+                    passData.cameraData.xr.StopSinglePass(cmd);
+                }
+                
                 // Render the lut.
                 Blitter.BlitTexture(cmd, internalLutTarget, Vector2.one, material, 0);
 
-                passData.cameraData.xr.StartSinglePass(cmd);
+                if (BeanShootoutURP.EnableXRRenderingSupport)
+                {
+                    passData.cameraData.xr.StartSinglePass(cmd);
+                }
             }
         }
 

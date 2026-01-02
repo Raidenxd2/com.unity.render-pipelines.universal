@@ -168,7 +168,7 @@ namespace UnityEngine.Rendering.Universal
 
             if (passData.cameraSettings.overrideCamera)
             {
-                if (passData.cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && passData.cameraData.xr.enabled)
                 {
                     Debug.LogWarning("RenderObjects pass is configured to override camera matrices. While rendering in stereo camera matrices cannot be overridden.");
                 }
@@ -196,7 +196,7 @@ namespace UnityEngine.Rendering.Universal
                 cmd.DrawRendererList(rendererList);
             }
 
-            if (passData.cameraSettings.overrideCamera && passData.cameraSettings.restoreCamera && !passData.cameraData.xr.enabled)
+            if (passData.cameraSettings.overrideCamera && passData.cameraSettings.restoreCamera && (!passData.cameraData.xr.enabled || !BeanShootoutURP.EnableXRRenderingSupport))
             {
                 RenderingUtils.SetViewAndProjectionMatrices(cmd, passData.cameraData.GetViewMatrix(), GL.GetGPUProjectionMatrix(passData.cameraData.GetProjectionMatrix(0), isYFlipped), false);
             }
@@ -316,7 +316,7 @@ namespace UnityEngine.Rendering.Universal
                 }
 
                 builder.AllowGlobalStateModification(true);
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     builder.EnableFoveatedRasterization(cameraData.xr.supportsFoveatedRendering && cameraData.xrUniversal.canFoveateIntermediatePasses);
                     builder.SetExtendedFeatureFlags(ExtendedFeatureFlags.MultiviewRenderRegionsCompatible);

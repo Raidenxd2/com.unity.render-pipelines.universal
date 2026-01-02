@@ -121,7 +121,7 @@ namespace UnityEngine.Rendering.Universal
             internal RendererListHandle skyRendererListHandle;
             internal Material material;
         }
-
+        
         private void InitPassData(ref PassData passData, in XRPass xr, in RendererListHandle handle)
         {
             passData.xr = xr;
@@ -147,14 +147,16 @@ namespace UnityEngine.Rendering.Universal
             using (var builder = renderGraph.AddRasterRenderPass<PassData>(passName, out var passData, profilingSampler))
             {
                 var skyRendererListHandle = CreateSkyBoxRendererList(renderGraph, cameraData);
+                
                 InitPassData(ref passData, cameraData.xr, skyRendererListHandle);
+                
                 passData.material = skyboxMaterial;
                 builder.UseRendererList(skyRendererListHandle);
                 builder.SetRenderAttachment(colorTarget, 0, AccessFlags.Write);
                 builder.SetRenderAttachmentDepth(depthTarget, AccessFlags.Write);
 
                 builder.AllowPassCulling(false);
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     bool passSupportsFoveation = cameraData.xrUniversal.canFoveateIntermediatePasses || resourceData.isActiveTargetBackBuffer;
                     builder.EnableFoveatedRasterization(cameraData.xr.supportsFoveatedRendering && passSupportsFoveation);

@@ -576,9 +576,6 @@ namespace UnityEditor.Rendering.Universal
             if (urpAsset.supportDataDrivenLensFlare)
                 urpAssetShaderFeatures |= ShaderFeatures.DataDrivenLensFlare;
 
-            if (urpAsset.gpuResidentDrawerMode != GPUResidentDrawerMode.Disabled)
-                urpAssetShaderFeatures |= ShaderFeatures.UseLegacyLightmaps;
-
             // URP post-processing and alpha output follows the back-buffer color format requested in the asset.
             // Back-buffer alpha format is required. Or a render texture with alpha formats.
             // Without any external option we would need to keep all shaders and assume potential alpha output for all projects.
@@ -653,9 +650,6 @@ namespace UnityEditor.Rendering.Universal
 
                 // Check to see if it's possible to remove the OFF variant for SSAO
                 everyRendererHasSSAO &= IsFeatureEnabled(rendererShaderFeatures, ShaderFeatures.ScreenSpaceOcclusion);
-
-                // Check for completely removing 2D passes
-                s_Strip2DPasses &= rendererData is not Renderer2DData;
 
                 // Add the features from the renderer to the combined feature set for this URP Asset
                 combinedURPAssetShaderFeatures |= rendererShaderFeatures;

@@ -311,7 +311,7 @@ namespace UnityEngine.Rendering.Universal
             }
 
             // Use eye texture's width and height as screen params when XR is enabled
-            if (cameraData.xr.enabled)
+            if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
             {
                 cameraWidth = (float)cameraTargetSizeCopy.x;
                 cameraHeight = (float)cameraTargetSizeCopy.y;
@@ -965,22 +965,35 @@ namespace UnityEngine.Rendering.Universal
                 passData.camera = cameraData.camera;
                 passData.renderingData = renderingData;
 
-                passData.cameraXRSettings.viewTotal = xr.enabled ? 2u : 1u;
-                passData.cameraXRSettings.viewCount = xr.enabled ? (uint)xr.viewCount : 1u;
-                passData.cameraXRSettings.viewOffset = (uint)xr.multipassId;
-                passData.xrPass = xr.enabled ? xr : null;
+                if (BeanShootoutURP.EnableXRRenderingSupport)
+                {
+                    passData.cameraXRSettings.viewTotal = xr.enabled ? 2u : 1u;
+                    passData.cameraXRSettings.viewCount = xr.enabled ? (uint)xr.viewCount : 1u;
+                    passData.cameraXRSettings.viewOffset = (uint)xr.multipassId;
+                }
+                else
+                {
+                    passData.cameraXRSettings.viewTotal = 1u;
+                    passData.cameraXRSettings.viewCount = 1u;
+                    passData.cameraXRSettings.viewOffset = 0u;
+                }
+
+                if (BeanShootoutURP.EnableXRRenderingSupport)
+                {
+                    passData.xrPass = xr.enabled ? xr : null;
+                }
 
                 builder.AllowPassCulling(false);
 
                 builder.SetRenderFunc((VFXProcessCameraPassData data, UnsafeGraphContext context) =>
                 {
-                    if (data.xrPass != null)
+                    if (BeanShootoutURP.EnableXRRenderingSupport && data.xrPass != null)
                         data.xrPass.StartSinglePass(context.cmd);
 
                     //Triggers dispatch per camera, all global parameters should have been setup at this stage.
                     CommandBufferHelpers.VFXManager_ProcessCameraCommand(data.camera, context.cmd, data.cameraXRSettings, data.renderingData.cullResults);
 
-                    if (data.xrPass != null)
+                    if (BeanShootoutURP.EnableXRRenderingSupport && data.xrPass != null)
                         data.xrPass.StopSinglePass(context.cmd);
                 });
 

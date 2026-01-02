@@ -153,7 +153,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                     builder.SetGlobalTextureAfterPass(depthTexture, s_CameraDepthTextureID);
 
                 builder.AllowGlobalStateModification(true);
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     builder.EnableFoveatedRasterization(cameraData.xr.supportsFoveatedRendering && cameraData.xrUniversal.canFoveateIntermediatePasses);
                     builder.SetExtendedFeatureFlags(ExtendedFeatureFlags.MultiviewRenderRegionsCompatible);

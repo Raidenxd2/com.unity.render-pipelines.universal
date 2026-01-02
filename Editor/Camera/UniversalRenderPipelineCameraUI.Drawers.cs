@@ -42,9 +42,6 @@ namespace UnityEditor.Rendering.Universal
             Expandable.Projection,
             k_ExpandedState,
             FoldoutOption.Indent,
-            CED.Group(
-                DrawerProjection
-                ),
             PhysicalCamera.Drawer
         );
 
@@ -64,17 +61,6 @@ namespace UnityEditor.Rendering.Universal
             Environment.Drawer,
             Output.Drawer
         };
-
-        static void DrawerProjection(UniversalRenderPipelineSerializedCamera p, Editor owner)
-        {
-            var camera = p.serializedObject.targetObject as Camera;
-            bool pixelPerfectEnabled = camera.TryGetComponent<PixelPerfectCamera>(out var pixelPerfectCamera) && pixelPerfectCamera.enabled;
-            if (pixelPerfectEnabled)
-                EditorGUILayout.HelpBox(Styles.pixelPerfectInfo, MessageType.Info);
-
-            using (new EditorGUI.DisabledGroupScope(pixelPerfectEnabled))
-                CameraUI.Drawer_Projection(p, owner);
-        }
 
         static void DrawerCameraType(UniversalRenderPipelineSerializedCamera p, Editor owner)
         {

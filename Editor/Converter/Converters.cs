@@ -92,10 +92,6 @@ namespace UnityEditor.Rendering.Universal
             {
                 case ConverterContainerId.BuiltInToURP:
                     return typeof(BuiltInToURPConverterContainer);
-                case ConverterContainerId.BuiltInToURP2D:
-                    return typeof(BuiltInToURP2DConverterContainer);
-                case ConverterContainerId.UpgradeURP2DAssets:
-                    return typeof(UpgradeURP2DAssetsContainer);
             }
 
             return null;
@@ -117,8 +113,6 @@ namespace UnityEditor.Rendering.Universal
                 case ConverterId.PPv2:
                     return typeof(PPv2Converter);
 #endif
-                case ConverterId.ParametricToFreeformLight:
-                    return typeof(ParametricToFreeformLightUpgrader);
             }
 
             return null;

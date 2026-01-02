@@ -448,7 +448,7 @@ namespace UnityEngine.Rendering.Universal
 #if UNITY_EDITOR
     [ShaderKeywordFilter.ApplyRulesIfTagsEqual("RenderPipeline", "UniversalPipeline")]
 #endif
-    public partial class UniversalRenderPipelineAsset : RenderPipelineAsset<UniversalRenderPipeline>, ISerializationCallbackReceiver, IProbeVolumeEnabledRenderPipeline, IGPUResidentRenderPipeline, IRenderGraphEnabledRenderPipeline
+    public partial class UniversalRenderPipelineAsset : RenderPipelineAsset<UniversalRenderPipeline>, ISerializationCallbackReceiver, IProbeVolumeEnabledRenderPipeline, IRenderGraphEnabledRenderPipeline
     {
         ScriptableRenderer[] m_Renderers = new ScriptableRenderer[1];
 
@@ -609,28 +609,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
         [SerializeField] bool m_UseFastSRGBLinearConversion = false;
         [SerializeField] bool m_SupportDataDrivenLensFlare = true;
-        [SerializeField] bool m_SupportScreenSpaceLensFlare = true;
-
-        // GPU Resident Drawer
-        [FormerlySerializedAs("m_MacroBatcherMode"), SerializeField]
-        private GPUResidentDrawerMode m_GPUResidentDrawerMode = GPUResidentDrawerMode.Disabled;
-        [SerializeField] float m_SmallMeshScreenPercentage = 0.0f;
-
-        [SerializeField] bool m_GPUResidentDrawerEnableOcclusionCullingInCameras;
-
-        GPUResidentDrawerSettings IGPUResidentRenderPipeline.gpuResidentDrawerSettings => new()
-        {
-            mode = m_GPUResidentDrawerMode,
-            enableOcclusionCulling = m_GPUResidentDrawerEnableOcclusionCullingInCameras,
-            supportDitheringCrossFade = m_EnableLODCrossFade,
-            allowInEditMode = true,
-            smallMeshScreenPercentage = m_SmallMeshScreenPercentage,
-#if UNITY_EDITOR
-            pickingShader = Shader.Find("Hidden/Universal Render Pipeline/BRGPicking"),
-#endif
-            errorShader = Shader.Find("Hidden/Universal Render Pipeline/FallbackError"),
-            loadingShader = Shader.Find("Hidden/Universal Render Pipeline/FallbackLoading"),
-        };
+        [SerializeField] private bool m_SupportScreenSpaceLensFlare = true;
 
         // Deprecated settings
         [SerializeField] ShadowQuality m_ShadowType = ShadowQuality.HardShadows;
@@ -823,8 +802,7 @@ namespace UnityEngine.Rendering.Universal
             DestroyRenderers();
             var pipeline = new UniversalRenderPipeline(this);
             CreateRenderers();
-
-            IGPUResidentRenderPipeline.ReinitializeGPUResidentDrawer();
+            
             return pipeline;
         }
 
@@ -896,12 +874,6 @@ namespace UnityEngine.Rendering.Universal
                 {
                     DestroyRenderer(ref m_Renderers[m_DefaultRendererIndex]);
                     m_Renderers[m_DefaultRendererIndex] = scriptableRendererData.InternalCreateRenderer();
-
-                    // GPU Resident Drawer may need to be reinitialized if renderer data has become incompatible/compatible
-                    if (gpuResidentDrawerMode != GPUResidentDrawerMode.Disabled)
-                    {
-                        IGPUResidentRenderPipeline.ReinitializeGPUResidentDrawer();
-                    }
                 }
 
                 return m_Renderers[m_DefaultRendererIndex];
@@ -939,12 +911,6 @@ namespace UnityEngine.Rendering.Universal
             {
                 DestroyRenderer(ref m_Renderers[index]);
                 m_Renderers[index] = m_RendererDataList[index].InternalCreateRenderer();
-
-                // GPU Resident Drawer may need to be reinitialized if renderer data has become incompatible/compatible
-                if (gpuResidentDrawerMode != GPUResidentDrawerMode.Disabled)
-                {
-                    IGPUResidentRenderPipeline.ReinitializeGPUResidentDrawer();
-                }
             }
 
             return m_Renderers[index];
@@ -1215,7 +1181,7 @@ namespace UnityEngine.Rendering.Universal
         public ProbeVolumeTextureMemoryBudget probeVolumeMemoryBudget
         {
             get => m_ProbeVolumeMemoryBudget;
-            internal set => m_ProbeVolumeMemoryBudget = value;
+            set => m_ProbeVolumeMemoryBudget = value;
         }
 
         /// <summary>
@@ -1224,7 +1190,7 @@ namespace UnityEngine.Rendering.Universal
         public ProbeVolumeBlendingTextureMemoryBudget probeVolumeBlendingMemoryBudget
         {
             get => m_ProbeVolumeBlendingMemoryBudget;
-            internal set => m_ProbeVolumeBlendingMemoryBudget = value;
+            set => m_ProbeVolumeBlendingMemoryBudget = value;
         }
 
         /// <summary>
@@ -1410,10 +1376,6 @@ namespace UnityEngine.Rendering.Universal
 
         internal bool ShouldUseReflectionProbeBlending()
         {
-            // The probe blending with atlas code path is always force enabled with GPUResidentDrawer since that is the only path supported here.
-            if (gpuResidentDrawerMode != GPUResidentDrawerMode.Disabled)
-                return true;
-
             return reflectionProbeBlending;
         }
 
@@ -1438,13 +1400,6 @@ namespace UnityEngine.Rendering.Universal
         internal bool ShouldUseReflectionProbeAtlasBlending(RenderingMode renderingMode)
         {
             var useProbeBlending = ShouldUseReflectionProbeBlending();
-
-            // The probe blending with atlas code path is always force enabled with GPUResidentDrawer since that is the only path supported here.
-            if (gpuResidentDrawerMode != GPUResidentDrawerMode.Disabled)
-            {
-                Assert.IsTrue(useProbeBlending);
-                return true;
-            }
 
             return useProbeBlending && (reflectionProbeAtlas || renderingMode == RenderingMode.DeferredPlus);
         }
@@ -1724,86 +1679,6 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         [Obsolete("This is obsolete, please use renderingLayerMaskNames instead. #from(2023.1) #breakingFrom(2023.1)", true)]
         public string[] lightLayerMaskNames => new string[0];
-
-        /// <summary>
-        /// GPUResidentDrawerMode configured on this pipeline asset
-        /// </summary>
-        public GPUResidentDrawerMode gpuResidentDrawerMode
-        {
-            get => m_GPUResidentDrawerMode;
-            set
-            {
-                if (value == m_GPUResidentDrawerMode)
-                    return;
-
-                m_GPUResidentDrawerMode = value;
-                OnValidate();
-            }
-        }
-
-        /// <summary>
-        /// Determines if the GPU Resident Drawer should perform occlusion culling in camera views
-        /// </summary>
-        public bool gpuResidentDrawerEnableOcclusionCullingInCameras
-        {
-            get => m_GPUResidentDrawerEnableOcclusionCullingInCameras;
-            set
-            {
-                if (value == m_GPUResidentDrawerEnableOcclusionCullingInCameras)
-                    return;
-
-                m_GPUResidentDrawerEnableOcclusionCullingInCameras = value;
-                OnValidate();
-            }
-        }
-
-        static class Strings
-        {
-            public static readonly string notURPRenderer = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not being {nameof(UniversalRendererData)}.";
-            public static readonly string renderingModeIncompatible = $"{nameof(GPUResidentDrawer)} Disabled due to some configured Universal Renderers not using the Forward+ or Deferred+ rendering paths.";
-        }
-
-        /// <inheritdoc/>
-        public bool IsGPUResidentDrawerSupportedBySRP(out string message, out LogType severity)
-        {
-            message = string.Empty;
-            severity = LogType.Warning;
-
-            // Only the URP rendering paths using the cluster light loop (F+ lights & probes) can be used with GRD,
-            // since BiRP-style per-object lights and reflection probes are incompatible with DOTS instancing.
-            foreach (var rendererData in m_RendererDataList)
-            {
-                if (rendererData is not UniversalRendererData universalRendererData)
-                {
-                    message = Strings.notURPRenderer;
-                    return false;
-                }
-
-                if (!universalRendererData.usesClusterLightLoop)
-                {
-                    message = Strings.renderingModeIncompatible;
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Default minimum screen percentage (0-20%) gpu-driven Renderers can cover before getting culled.
-        /// </summary>
-        public float smallMeshScreenPercentage
-        {
-            get => m_SmallMeshScreenPercentage;
-            set
-            {
-                if (Math.Abs(value - m_SmallMeshScreenPercentage) < float.Epsilon)
-                    return;
-
-                m_SmallMeshScreenPercentage = Mathf.Clamp(value, 0.0f, 20.0f);
-                OnValidate();
-            }
-        }
 
         /// <summary>
         /// Unity raises a callback to this method before it serializes the asset.

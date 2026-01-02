@@ -25,5 +25,4 @@ namespace UnityEditor.Rendering
     }
 
     class UniversalRendererResourcesStripper : RendererStripper<UniversalRendererResources, UniversalRendererData> { }
-    class Renderer2DResourcesStripper : RendererStripper<Renderer2DResources, Renderer2DData> { }
 }

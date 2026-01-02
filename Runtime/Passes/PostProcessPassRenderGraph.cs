@@ -1657,6 +1657,7 @@ namespace UnityEngine.Rendering.Universal
         }
 #endregion
 
+#if !KILLITMYSELF_URP
 #region LensFlareDataDriven
         private class LensFlarePassData
         {
@@ -1991,6 +1992,7 @@ namespace UnityEngine.Rendering.Universal
         }
 
         #endregion
+#endif
 
         static private void ScaleViewport(RasterCommandBuffer cmd, RTHandle sourceTextureHdl, RTHandle dest, UniversalCameraData cameraData, bool hasFinalPass)
         {
@@ -2633,7 +2635,9 @@ namespace UnityEngine.Rendering.Universal
             bool useSubPixelMorpAA = cameraData.antialiasing == AntialiasingMode.SubpixelMorphologicalAntiAliasing;
             var dofMaterial = m_DepthOfField.mode.value == DepthOfFieldMode.Gaussian ? m_Materials.gaussianDepthOfField : m_Materials.bokehDepthOfField;
             bool useDepthOfField = m_DepthOfField.IsActive() && !isSceneViewCamera && dofMaterial != null;
+#if !KILLITMYSELF_URP
             bool useLensFlare = !LensFlareCommonSRP.Instance.IsEmpty() && m_SupportDataDrivenLensFlare;
+#endif
             bool useLensFlareScreenSpace = m_LensFlareScreenSpace.IsActive() && m_SupportScreenSpaceLensFlare;
             bool useMotionBlur = m_MotionBlur.IsActive() && !isSceneViewCamera;
             bool usePaniniProjection = m_PaniniProjection.IsActive() && !isSceneViewCamera;
@@ -2858,17 +2862,21 @@ namespace UnityEngine.Rendering.Universal
                             sameBloomInputOutputTex = true;
                         }
 
+#if !KILLITMYSELF_URP
                         bloomTexture = RenderLensFlareScreenSpace(renderGraph, cameraData.camera, srcDesc, bloomTexture, bloomMipFlareSource, sameBloomInputOutputTex);
+#endif
                     }
 
                     UberPostSetupBloomPass(renderGraph, m_Materials.uber, srcDesc);
                 }
 
+#if !KILLITMYSELF_URP
                 if (useLensFlare)
                 {
                     LensFlareDataDrivenComputeOcclusion(renderGraph, resourceData, cameraData, srcDesc);
                     RenderLensFlareDataDriven(renderGraph, resourceData, cameraData, in currentSource, in srcDesc);
                 }
+#endif
 
                 // TODO RENDERGRAPH: Once we started removing the non-RG code pass in URP, we should move functions below to renderfunc so that material setup happens at
                 // the same timeline of executing the rendergraph. Keep them here for now so we cound reuse non-RG code to reduce maintainance cost.

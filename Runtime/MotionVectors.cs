@@ -216,7 +216,16 @@ namespace UnityEngine.Rendering.Universal
             {
                 bool isPreviousFrameDataInvalid = (m_LastFrameIndex[eyeIndex] == -1) || aspectChanged;
 
-                int numActiveViews = cameraData.xr.enabled ? cameraData.xr.viewCount : 1;
+                int numActiveViews;
+
+                if (BeanShootoutURP.EnableXRRenderingSupport)
+                {
+                    numActiveViews = cameraData.xr.enabled ? cameraData.xr.viewCount : 1;
+                }
+                else
+                {
+                    numActiveViews = 1;
+                }
 
                 // Make sure we don't try to handle more views than we expect to support
                 Debug.Assert(numActiveViews <= k_EyeCount);
@@ -270,6 +279,7 @@ namespace UnityEngine.Rendering.Universal
         public void SetGlobalMotionMatrices(RasterCommandBuffer cmd, XRPass xr)
         {
             var passID = GetXRMultiPassId(xr);
+            
 #if ENABLE_VR && ENABLE_XR_MODULE
             if (xr.enabled && xr.singlePassEnabled)
             {

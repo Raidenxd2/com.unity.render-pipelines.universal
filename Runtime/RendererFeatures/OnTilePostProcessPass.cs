@@ -84,7 +84,6 @@ public class OnTilePostProcessPass : ScriptableRenderPass
         TextureDesc srcDesc = renderGraph.GetTextureDesc(source); ;
         
         TextureHandle destination = resourceData.backBufferColor;
-
         SetupVignette(m_OnTileUberMaterial, cameraData.xr, srcDesc.width, srcDesc.height, vignette);
         SetupLut(m_OnTileUberMaterial, colorLookup, colorAdjustments, lutSize);
         SetupTonemapping(m_OnTileUberMaterial, tonemapping, isHdrGrading: postProcessingData.gradingMode == ColorGradingMode.HighDynamicRange);
@@ -353,13 +352,14 @@ public class OnTilePostProcessPass : ScriptableRenderPass
 
     //these methods should be publicly available for user features
     void SetupVignette(Material material, XRPass xrPass, int width, int height, Vignette vignette)
+    
     {
         var color = vignette.color.value;
         var center = vignette.center.value;
         var aspectRatio = width / (float)height;
 
 #if ENABLE_VR
-        if (xrPass != null && xrPass.enabled)
+        if (BeanShootoutURP.EnableXRRenderingSupport && xrPass != null && xrPass.enabled)
         {
             if (xrPass.singlePassEnabled)
                 material.SetVector(ShaderConstants._Vignette_ParamsXR, xrPass.ApplyXRViewCenterOffset(center));

@@ -287,7 +287,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 passData.copyToDepth = CopyToDepth || CopyToDepthXR;
                 passData.isDstBackbuffer = CopyToBackbuffer || CopyToDepthXR;
 
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     builder.SetExtendedFeatureFlags(ExtendedFeatureFlags.MultiviewRenderRegionsCompatible);
                 }

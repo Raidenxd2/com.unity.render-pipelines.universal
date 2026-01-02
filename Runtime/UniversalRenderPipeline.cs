@@ -265,12 +265,10 @@ namespace UnityEngine.Rendering.Universal
             var defaultVolumeProfileSettings = GraphicsSettings.GetRenderPipelineSettings<URPDefaultVolumeProfileSettings>();
             VolumeManager.instance.Initialize(defaultVolumeProfileSettings.volumeProfile, asset.volumeProfile);
 
-#if !KILLITMYSELF_URP            
             // Configure initial XR settings
             MSAASamples msaaSamples = (MSAASamples)Mathf.Clamp(Mathf.NextPowerOfTwo(QualitySettings.antiAliasing), (int)MSAASamples.None, (int)MSAASamples.MSAA8x);
             XRSystem.SetDisplayMSAASamples(msaaSamples);
             XRSystem.SetRenderScale(asset.renderScale);
-#endif
 
             Lightmapping.SetDelegate(lightsDelegate);
 
@@ -455,9 +453,12 @@ namespace UnityEngine.Rendering.Universal
         /// <inheritdoc/>
         protected override void Render(ScriptableRenderContext renderContext, List<Camera> cameras)
         {
-#if KILLITMYSELF_URP            
-            Graphics.ExecuteCommandBuffer(BeanShootout_EarlyCmd);
-#endif            
+#if KILLITMYSELF_URP
+            if (BeanShootoutURP.EnableEarlyCmd)
+            {
+                Graphics.ExecuteCommandBuffer(BeanShootout_EarlyCmd);
+            }
+#endif
             
 #if !KILLITMYSELF_URP
             SetHDRState(cameras);
@@ -468,11 +469,7 @@ namespace UnityEngine.Rendering.Universal
             AdjustUIOverlayOwnership(cameraCount);
 
             // Bandwidth optimization with Render Graph in some circumstances
-            SetupScreenMSAASamplesState(cameraCount);
-
-#if UNITY_EDITOR            
-            GPUResidentDrawer.ReinitializeIfNeeded();
-#endif            
+            SetupScreenMSAASamplesState(cameraCount);        
 
             // TODO: Would be better to add Profiling name hooks into RenderPipelineManager.
             // C#8 feature, only in >= 2020.2
@@ -483,9 +480,12 @@ namespace UnityEngine.Rendering.Universal
 #if !KILLITMYSELF_URP
                 GraphicsSettings.lightsUseLinearIntensity = (QualitySettings.activeColorSpace == ColorSpace.Linear);
                 GraphicsSettings.lightsUseColorTemperature = true;
-                SetupPerFrameShaderConstants();
-                XRSystem.SetDisplayMSAASamples((MSAASamples)asset.msaaSampleCount);
 #endif
+                if (BeanShootoutURP.EnableXRRenderingSupport)
+                {
+                    SetupPerFrameShaderConstants();
+                    XRSystem.SetDisplayMSAASamples((MSAASamples)asset.msaaSampleCount);
+                }
 
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
                 if (DebugManager.instance.isAnyDebugUIActive)
@@ -791,11 +791,15 @@ namespace UnityEngine.Rendering.Universal
 
             // TODO: move skybox code from C++ to URP in order to remove the call to context.Submit() inside DrawSkyboxPass
             // Until then, we can't use nested profiling scopes with XR multipass
-#if !KILLITMYSELF_URP
-            CommandBuffer cmdScope = cameraData.xr.enabled ? null : cmd;
-#else
-            CommandBuffer cmdScope = cmd;
-#endif
+            CommandBuffer cmdScope;
+            if (BeanShootoutURP.EnableXRRenderingSupport)
+            {
+                cmdScope = cameraData.xr.enabled ? null : cmd;
+            }
+            else
+            {
+                cmdScope = cmd;
+            }
 
             var cameraMetadata = CameraMetadataCache.GetCached(camera);
             using (new ProfilingScope(cmdScope, cameraMetadata.sampler)) // Enqueues a "BeginSample" command into the CommandBuffer cmd
@@ -1068,33 +1072,39 @@ namespace UnityEngine.Rendering.Universal
 #endif
             
             // Prepare XR rendering
-#if !KILLITMYSELF_URP
-            var xrActive = false;
-            var xrRendering = baseCameraAdditionalData?.allowXRRendering ?? true;
-#endif
+            bool xrRendering = false;
+            bool xrActive = false;
+            if (BeanShootoutURP.EnableXRRenderingSupport)
+            {
+                xrRendering = baseCameraAdditionalData?.allowXRRendering ?? true;
+            }
             
             var xrLayout = XRSystem.NewLayout();
-#if !KILLITMYSELF_URP            
-            xrLayout.AddCamera(baseCamera, xrRendering);
-#else
-            xrLayout.AddCamera(baseCamera, false);
-#endif            
+            if (BeanShootoutURP.EnableXRRenderingSupport)
+            {
+                xrLayout.AddCamera(baseCamera, xrRendering);
+            }
+            else
+            {
+                xrLayout.AddCamera(baseCamera, false);
+            }
             
             // With XR multi-pass enabled, each camera can be rendered multiple times with different parameters
             foreach ((Camera _, XRPass xrPass) in xrLayout.GetActivePasses())
             {
-#if !KILLITMYSELF_URP                
                 var xrPassUniversal = xrPass as XRPassUniversal;
-                if (xrPass.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport)
                 {
-                    xrActive = true;
-                    UpdateCameraStereoMatrices(baseCamera, xrPass);
+                    if (xrPass.enabled)
+                    {
+                        xrActive = true;
+                        UpdateCameraStereoMatrices(baseCamera, xrPass);
 
-                    // Apply XR display's viewport scale to URP's dynamic resolution solution
-                    float scaleToApply = XRSystem.GetRenderViewportScale();
-                    ScalableBufferManager.ResizeBuffers(scaleToApply, scaleToApply);
+                        // Apply XR display's viewport scale to URP's dynamic resolution solution
+                        float scaleToApply = XRSystem.GetRenderViewportScale();
+                        ScalableBufferManager.ResizeBuffers(scaleToApply, scaleToApply);
+                    }
                 }
-#endif
 
 #if !KILLITMYSELF_URP                
                 bool finalOutputHDR = false;
@@ -1180,12 +1190,12 @@ namespace UnityEngine.Rendering.Universal
 
                     RenderSingleCamera(context, baseCameraData);
                 }
-
-#if !KILLITMYSELF_URP                
+                
                 // Late latching is not supported after this point
-                if (xrPass.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && xrPass.enabled)
                     XRSystemUniversal.EndLateLatching(baseCamera, xrPassUniversal);
-            
+
+#if !KILLITMYSELF_URP
                 // Overlay Cameras Rendering
                 if (isStackedRendering)
                 {
@@ -1238,9 +1248,8 @@ namespace UnityEngine.Rendering.Universal
                 }
 #endif
             }
-
-#if !KILLITMYSELF_URP        
-            if (xrActive)
+            
+            if (BeanShootoutURP.EnableXRRenderingSupport && xrActive)
             {
                 CommandBuffer cmd = CommandBufferPool.Get();
                 XRSystem.RenderMirrorView(cmd, baseCamera);
@@ -1248,7 +1257,6 @@ namespace UnityEngine.Rendering.Universal
                 context.Submit();
                 CommandBufferPool.Release(cmd);
             }
-#endif
 
             XRSystem.EndLayout();
         }
@@ -1693,12 +1701,6 @@ namespace UnityEngine.Rendering.Universal
             cameraData.postProcessingRequiresDepthTexture = CheckPostProcessForDepth(cameraData);
             cameraData.resolveFinalTarget = resolveFinalTarget;
             cameraData.isLastBaseCamera = isLastBaseCamera;
-
-            // enable GPU occlusion culling in game and scene views only
-            cameraData.useGPUOcclusionCulling = GPUResidentDrawer.IsInstanceOcclusionCullingEnabled()
-                && renderer.supportsGPUOcclusion
-                && camera.cameraType is CameraType.SceneView or CameraType.Game or CameraType.Preview;
-            cameraData.requiresDepthTexture |= cameraData.useGPUOcclusionCulling;
 
             // Disable depth and color copy. We should add it in the renderer instead to avoid performance pitfalls
             // of camera stacking breaking render pass execution implicitly.

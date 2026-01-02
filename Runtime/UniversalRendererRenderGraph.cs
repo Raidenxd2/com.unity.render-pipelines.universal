@@ -775,55 +775,6 @@ namespace UnityEngine.Rendering.Universal
             GBuffer
         }
 
-        private void UpdateInstanceOccluders(RenderGraph renderGraph, UniversalCameraData cameraData, TextureHandle depthTexture)
-        {
-            int scaledWidth = (int)(cameraData.pixelWidth * cameraData.renderScale);
-            int scaledHeight = (int)(cameraData.pixelHeight * cameraData.renderScale);
-            bool isSinglePassXR = cameraData.xr.enabled && cameraData.xr.singlePassEnabled;
-            var occluderParams = new OccluderParameters(cameraData.camera.GetInstanceID())
-            {
-                subviewCount = isSinglePassXR ? 2 : 1,
-                depthTexture = depthTexture,
-                depthSize = new Vector2Int(scaledWidth, scaledHeight),
-                depthIsArray = isSinglePassXR,
-            };
-            Span<OccluderSubviewUpdate> occluderSubviewUpdates = stackalloc OccluderSubviewUpdate[occluderParams.subviewCount];
-            for (int subviewIndex = 0; subviewIndex < occluderParams.subviewCount; ++subviewIndex)
-            {
-                var viewMatrix = cameraData.GetViewMatrix(subviewIndex);
-                var projMatrix = cameraData.GetProjectionMatrix(subviewIndex);
-                occluderSubviewUpdates[subviewIndex] = new OccluderSubviewUpdate(subviewIndex)
-                {
-                    depthSliceIndex = subviewIndex,
-                    viewMatrix = viewMatrix,
-                    invViewMatrix = viewMatrix.inverse,
-                    gpuProjMatrix = GL.GetGPUProjectionMatrix(projMatrix, true),
-                    viewOffsetWorldSpace = Vector3.zero,
-                };
-            }
-            GPUResidentDrawer.UpdateInstanceOccluders(renderGraph, occluderParams, occluderSubviewUpdates);
-        }
-
-        private void InstanceOcclusionTest(RenderGraph renderGraph, UniversalCameraData cameraData, OcclusionTest occlusionTest)
-        {
-            bool isSinglePassXR = cameraData.xr.enabled && cameraData.xr.singlePassEnabled;
-            int subviewCount = isSinglePassXR ? 2 : 1;
-            var settings = new OcclusionCullingSettings(cameraData.camera.GetInstanceID(), occlusionTest)
-            {
-                instanceMultiplier = (isSinglePassXR && !SystemInfo.supportsMultiview) ? 2 : 1,
-            };
-            Span<SubviewOcclusionTest> subviewOcclusionTests = stackalloc SubviewOcclusionTest[subviewCount];
-            for (int subviewIndex = 0; subviewIndex < subviewCount; ++subviewIndex)
-            {
-                subviewOcclusionTests[subviewIndex] = new SubviewOcclusionTest()
-                {
-                    cullingSplitIndex = 0,
-                    occluderSubviewIndex = subviewIndex,
-                };
-            }
-            GPUResidentDrawer.InstanceOcclusionTest(renderGraph, settings, subviewOcclusionTests);
-        }
-
         // Records the depth copy pass along with the specified custom passes in a way that properly handles depth read dependencies
         // This function will also trigger motion vector rendering if required by the current frame since its availability is intended to match depth's.
         private void RecordCustomPassesWithDepthCopyAndMotion(RenderGraph renderGraph, UniversalResourceData resourceData, RenderPassEvent earliestDepthReadEvent, RenderPassEvent currentEvent, bool renderMotionVectors)
@@ -1063,14 +1014,6 @@ namespace UnityEngine.Rendering.Universal
                 for (int passIndex = 0; passIndex < passCount; ++passIndex)
                 {
                     uint batchLayerMask = uint.MaxValue;
-                    if (needsOccluderUpdate)
-                    {
-                        // first pass: test everything against previous frame final depth pyramid
-                        // second pass: re-test culled against current frame intermediate depth pyramid
-                        OcclusionTest occlusionTest = (passIndex == 0) ? OcclusionTest.TestAll : OcclusionTest.TestCulled;
-                        InstanceOcclusionTest(renderGraph, cameraData, occlusionTest);
-                        batchLayerMask = occlusionTest.GetBatchLayerMask();
-                    }
 
                     // The prepasses are executed multiple times when GRD occlusion is active.
                     // We only want to set global textures after all executions are complete.
@@ -1102,15 +1045,6 @@ namespace UnityEngine.Rendering.Universal
                     }
                     else
                         m_DepthPrepass.Render(renderGraph, frameData, in depthTarget, batchLayerMask, setGlobalDepth);
-
-                    if (needsOccluderUpdate)
-                    {
-                        // first pass: make current frame intermediate depth pyramid
-                        // second pass: make current frame final depth pyramid, set occlusion test results for later passes
-                        UpdateInstanceOccluders(renderGraph, cameraData, depthTarget);
-                        if (passIndex != 0)
-                            InstanceOcclusionTest(renderGraph, cameraData, OcclusionTest.TestAll);
-                    }
                 }
             }
 
@@ -1151,28 +1085,11 @@ namespace UnityEngine.Rendering.Universal
                 for (int passIndex = 0; passIndex < passCount; ++passIndex)
                 {
                     uint batchLayerMask = uint.MaxValue;
-                    if (needsOccluderUpdate)
-                    {
-                        // first pass: test everything against previous frame final depth pyramid
-                        // second pass: re-test culled against current frame intermediate depth pyramid
-                        OcclusionTest occlusionTest = (passIndex) == 0 ? OcclusionTest.TestAll : OcclusionTest.TestCulled;
-                        InstanceOcclusionTest(renderGraph, cameraData, occlusionTest);
-                        batchLayerMask = occlusionTest.GetBatchLayerMask();
-                    }
 
 	                // When we have a partial depth normals prepass, we must wait until the gbuffer pass to set global textures.
 	                // In this case, the incoming global texture data is incomplete and the gbuffer pass is required to complete it.
 	                bool setGlobalTextures = isDepthNormalPrepass && !hasFullPrepass;
                     m_GBufferPass.Render(renderGraph, frameData, resourceData.activeColorTexture, resourceData.activeDepthTexture, setGlobalTextures, batchLayerMask);
-
-                    if (needsOccluderUpdate)
-                    {
-                        // first pass: make current frame intermediate depth pyramid
-                        // second pass: make current frame final depth pyramid, set occlusion test results for later passes
-                        UpdateInstanceOccluders(renderGraph, cameraData, resourceData.activeDepthTexture);
-                        if (passIndex != 0)
-                            InstanceOcclusionTest(renderGraph, cameraData, OcclusionTest.TestAll);
-                    }
                 }
 
                 // In addition to regularly scheduled depth copies here, we also need to copy depth when native render passes aren't available.
@@ -1202,14 +1119,6 @@ namespace UnityEngine.Rendering.Universal
                 for (int passIndex = 0; passIndex < passCount; ++passIndex)
                 {
                     uint batchLayerMask = uint.MaxValue;
-                    if (needsOccluderUpdate)
-                    {
-                        // first pass: test everything against previous frame final depth pyramid
-                        // second pass: re-test culled against current frame intermediate depth pyramid
-                        OcclusionTest occlusionTest = (passIndex) == 0 ? OcclusionTest.TestAll : OcclusionTest.TestCulled;
-                        InstanceOcclusionTest(renderGraph, cameraData, occlusionTest);
-                        batchLayerMask = occlusionTest.GetBatchLayerMask();
-                    }
 
                     if (m_RenderingLayerProvidesRenderObjectPass)
                     {
@@ -1236,15 +1145,6 @@ namespace UnityEngine.Rendering.Universal
                             resourceData.additionalShadowsTexture,
                             batchLayerMask,
                             true);
-                    }
-
-                    if (needsOccluderUpdate)
-                    {
-                        // first pass: make current frame intermediate depth pyramid
-                        // second pass: make current frame final depth pyramid, set occlusion test results for later passes
-                        UpdateInstanceOccluders(renderGraph, cameraData, resourceData.activeDepthTexture);
-                        if (passIndex != 0)
-                            InstanceOcclusionTest(renderGraph, cameraData, OcclusionTest.TestAll);
                     }
                 }
             }

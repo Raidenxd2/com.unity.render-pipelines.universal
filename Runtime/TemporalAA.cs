@@ -351,7 +351,7 @@ namespace UnityEngine.Rendering.Universal
 
             if (reasonWarning == null && cameraData.cameraTargetDescriptor.msaaSamples != 1)
             {
-                if (cameraData.xr != null && cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr != null && cameraData.xr.enabled)
                     reasonWarning = "because MSAA is on. MSAA must be disabled globally for all cameras in XR mode.";
                 else
                     reasonWarning = "because MSAA is on. Turn MSAA off on the camera or current URP Asset.";
@@ -494,7 +494,7 @@ namespace UnityEngine.Rendering.Universal
                 passData.srcTaaAccumTex = srcAccumulation;
                 builder.UseTexture(srcAccumulation, AccessFlags.Read);
 
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     builder.SetExtendedFeatureFlags(ExtendedFeatureFlags.MultiviewRenderRegionsCompatible);
                 }
@@ -552,7 +552,7 @@ namespace UnityEngine.Rendering.Universal
                     passData.srcColorTex = dstColor;
                     builder.UseTexture(dstColor, AccessFlags.Read);   // Resolved color is the new history
 
-                    if (cameraData.xr.enabled)
+                    if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                     {
                         builder.SetExtendedFeatureFlags(ExtendedFeatureFlags.MultiviewRenderRegionsCompatible);
                     }

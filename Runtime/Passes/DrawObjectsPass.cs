@@ -143,7 +143,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             Vector4 drawObjectPassData = new Vector4(0.0f, 0.0f, 0.0f, (data.isOpaque) ? 1.0f : 0.0f);
             cmd.SetGlobalVector(s_DrawObjectPassDataPropID, drawObjectPassData);
 
-            if (data.cameraData.xr.enabled && data.isActiveTargetBackBuffer)
+            if (BeanShootoutURP.EnableXRRenderingSupport && data.cameraData.xr.enabled && data.isActiveTargetBackBuffer)
             {
                 cmd.SetViewport(data.cameraData.xr.GetViewport());
             }
@@ -340,7 +340,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 }
 
                 builder.AllowGlobalStateModification(true);
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     bool passSupportsFoveation = cameraData.xrUniversal.canFoveateIntermediatePasses || resourceData.isActiveTargetBackBuffer;
                     builder.EnableFoveatedRasterization(cameraData.xr.supportsFoveatedRendering && passSupportsFoveation);
@@ -516,7 +516,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 // Required here because of RenderingLayerUtils.SetupProperties
                 builder.AllowGlobalStateModification(true);
 
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     bool passSupportsFoveation = cameraData.xrUniversal.canFoveateIntermediatePasses || resourceData.isActiveTargetBackBuffer;
                     builder.EnableFoveatedRasterization(cameraData.xr.supportsFoveatedRendering && passSupportsFoveation);

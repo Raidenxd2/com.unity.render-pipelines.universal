@@ -188,7 +188,7 @@ namespace UnityEngine.Rendering.Universal
 
         ForwardLights m_ForwardLights;
         DeferredLights m_DeferredLights;
-        RenderingMode m_RenderingMode;
+        public RenderingMode m_RenderingMode;
         DepthPrimingMode m_DepthPrimingMode;
         CopyDepthMode m_CopyDepthMode;
         DepthFormat m_CameraDepthAttachmentFormat;
@@ -483,9 +483,11 @@ namespace UnityEngine.Rendering.Universal
                 this.supportedRenderingFeatures.msaa = false;
             }
 
+#if !KILLITMYSELF_URP
             LensFlareCommonSRP.mergeNeeded = 0;
             LensFlareCommonSRP.maxLensFlareWithOcclusionTemporalSample = 1;
             LensFlareCommonSRP.Initialize();
+#endif
 
 #if URP_COMPATIBILITY_MODE
             m_VulkanEnablePreTransform = GraphicsSettings.HasShaderDefine(BuiltinShaderDefine.UNITY_PRETRANSFORM_TO_DISPLAY_ORIENTATION);
@@ -539,7 +541,9 @@ namespace UnityEngine.Rendering.Universal
 
             CleanupRenderGraphResources();
 
+#if !KILLITMYSELF_URP
             LensFlareCommonSRP.Dispose();
+#endif
 
 #if ENABLE_VR && ENABLE_XR_MODULE
             Experimental.Rendering.XRSystem.Dispose();

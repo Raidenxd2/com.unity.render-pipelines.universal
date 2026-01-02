@@ -179,6 +179,7 @@ namespace UnityEngine.Rendering.Universal
         {
             internal Camera camera;
             internal XRPass xr;
+            
 
             internal TextureHandle cameraDepth;
             internal Material cameraMaterial;
@@ -219,7 +220,7 @@ namespace UnityEngine.Rendering.Universal
                 builder.UseAllGlobalTextures(true);
 
                 builder.AllowGlobalStateModification(true);
-                if (cameraData.xr.enabled)
+                if (BeanShootoutURP.EnableXRRenderingSupport && cameraData.xr.enabled)
                 {
                     builder.EnableFoveatedRasterization(cameraData.xr.supportsFoveatedRendering && cameraData.xrUniversal.canFoveateIntermediatePasses);
                     builder.SetExtendedFeatureFlags(ExtendedFeatureFlags.MultiviewRenderRegionsCompatible);

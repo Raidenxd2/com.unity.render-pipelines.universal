@@ -212,8 +212,15 @@ namespace UnityEngine.Rendering.Universal.Internal
         {
             m_DownsamplingMethod = downsampling;
 
-            UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
-            RenderInternal(renderGraph, destination, source, cameraData.xr.enabled);
+            if (BeanShootoutURP.EnableXRRenderingSupport)
+            {
+                UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
+                RenderInternal(renderGraph, destination, source, cameraData.xr.enabled);
+            }
+            else
+            {
+                RenderInternal(renderGraph, destination, source, false);
+            }
         }
 
         static readonly string k_CopyColorPassName = "Copy Color";

@@ -194,21 +194,6 @@ namespace UnityEngine.Rendering.Universal
                     DebugHandler.ResetDebugRenderTarget();
                 }
             }
-
-            if (DebugHandler != null)
-            {
-                if (!DebugHandler.TryGetFullscreenDebugMode(out DebugFullScreenMode fullScreenDebugMode, out int textureHeightPercent))
-                {
-                    var debugSettings = DebugHandler.DebugDisplaySettings.gpuResidentDrawerSettings;
-
-                    GPUResidentDrawer.RenderDebugOcclusionTestOverlay(renderGraph, debugSettings, cameraData.camera.GetInstanceID(), resourceData.activeColorTexture);
-
-                    float screenWidth = (int)(cameraData.pixelHeight * cameraData.renderScale);
-                    float screenHeight = (int)(cameraData.pixelHeight * cameraData.renderScale);
-                    float maxHeight = screenHeight * textureHeightPercent / 100.0f;
-                    GPUResidentDrawer.RenderDebugOccluderOverlay(renderGraph, debugSettings, new Vector2(0.25f * screenWidth, screenHeight - 1.5f * maxHeight), maxHeight, resourceData.activeColorTexture);
-                }
-            }
         }
 
         private void SetupAfterPostRenderGraphFinalPassDebug(RenderGraph renderGraph, ContextContainer frameData)
