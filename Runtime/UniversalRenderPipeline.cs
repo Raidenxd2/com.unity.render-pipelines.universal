@@ -879,10 +879,6 @@ namespace UnityEngine.Rendering.Universal
                 var data = frameData.Create<UniversalRenderingData>();
                 data.cullResults = context.Cull(ref cullingParameters);
 
-#if !KILLITMYSELF_URP
-                GPUResidentDrawer.PostCullBeginCameraRendering(new RenderRequestBatcherContext { commandBuffer = cmd });
-#endif
-
                 RenderingMode? renderingMode = (cameraData.renderer as UniversalRenderer)?.renderingModeActual;
 
                 // Initialize all the data types required for rendering.
