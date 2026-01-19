@@ -1160,7 +1160,7 @@ namespace UnityEngine.Rendering.Universal
                     // This is equivalent of UniversalCameraData.isHDROutputActive but without necessiting the base camera to be the last camera in the stack.
                     bool hdrDisplayOutputActive = mainHdrDisplayOutputActive;
 #endif
-#if ENABLE_VR && ENABLE_XR_MODULE
+#if ENABLE_VR && ENABLE_XR_MODULE && !KILLITMYSELF_URP
                     // If we are rendering to xr then we need to look at the XR Display rather than the main non-xr display.
                     if (xrPass.enabled)
                         hdrDisplayOutputActive = xrPass.isHDRDisplayOutputActive;
