@@ -1,8 +1,13 @@
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 
+#if UNITY_EDITOR
 [InitializeOnLoad]
+#endif
 public static class BeanShootoutURP
 {
+#if UNITY_EDITOR
     static BeanShootoutURP()
     {
         EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
@@ -15,6 +20,7 @@ public static class BeanShootoutURP
             EnableEarlyCmd = false;
         }
     }
+#endif
 
     /// <summary>
     /// Determines if XR rendering should be done.
